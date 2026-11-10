@@ -1,0 +1,41 @@
+# Dependensi & hasil build
+/vendor
+/composer.phar
+/phpunit.phar
+/phpunit.xml
+
+# Konfigurasi lokal (jangan pernah di-commit)
+.env
+.env.local
+.env.*.local
+
+# Runtime Yii2 (log, cache, debug)
+/runtime/*
+
+# Aset yang di-generate Yii2 (asset bundle)
+/web/assets/*
+
+# Upload pengguna
+/web/uploads/*
+!/web/uploads/.gitkeep
+
+# Editor / OS
+.idea
+.vscode
+nbproject
+.buildpath
+.project
+.settings
+.DS_Store
+Thumbs.db
+
+# Log & arsip
+*.log
+*.zip
+
+# Vagrant
+/.vagrant
+
+# PHPUnit
+tests/_output/*
+tests/_support/_generated
