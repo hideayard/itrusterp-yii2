@@ -144,6 +144,64 @@ sudo certbot --nginx -d api.domainmu.com
 7. **Apache rewrite**: `web/.htaccess` sudah disertakan. Pastikan `AllowOverride All` aktif
    (biasanya standar di cPanel).
 
+### 4.1 Bahaya document root = root proyek (dan cara menutupnya)
+
+Kalau subdomain diarahkan ke **root proyek** (bukan `web/`), berkas berikut bisa diunduh publik:
+
+| URL | Risiko |
+|---|---|
+| `/.env` | 🔴 kredensial database, kunci cookie |
+| `/.git/…` | 🔴 seluruh riwayat kode |
+| `/vendor/composer/installed.json`, `/composer.json`, `/composer.lock` | versi paket (memudahkan eksploitasi CVE) |
+| `/runtime/logs/app.log` | jejak error, kadang berisi query/data |
+| `/yii`, `/requirements.php` | utilitas CLI/instalasi |
+
+**Solusi terbaik: ubah Document Root subdomain ke folder `web/`.**
+cPanel → **Domains** → baris `erp.itrust-tech.id` → **Manage** → **Document Root** →
+`/home/USER/erp.itrust-tech.id/web` → **Save**. Sesudah itu `.env` otomatis tidak terjangkau
+karena berada di luar document root.
+
+**Bila hosting tidak mengizinkan Document Root diubah**, tambahkan `.htaccess` di **document root
+saat ini** (root proyek) untuk menutup berkas sensitif. Berkas ini **tidak** bisa meneruskan
+request ke `web/` tanpa merusak PATH_INFO, jadi base URL API menjadi
+`https://domainmu.com/subfolder/web/admin/api/v1` — tidak masalah karena frontend (Astro/Worker)
+memanggil API dari sisi server, URL-nya tidak terlihat pengguna.
+
+```apache
+RewriteEngine On
+
+# Tolak berkas sensitif berawalan titik (.env, .git, .htaccess, …),
+# /.well-known/ dikecualikan untuk verifikasi SSL.
+RewriteCond %{REQUEST_URI} !/\.well-known/
+RewriteRule (^|/)\. - [F,L]
+
+# Tolak ekstensi sensitif
+RewriteRule \.(env|sql|log|md|lock|yml|yaml|neon|sh|ps1|bat|dist|json)$ - [F,L]
+
+# Tolak folder internal & utilitas CLI
+RewriteRule ^(vendor|config|runtime|tests|scripts)(/|$) - [F,L]
+RewriteRule ^(yii|yii\.bat|requirements\.php|codeception\.yml|Vagrantfile|docker-compose\.yml)$ - [F,L]
+
+# Root proyek: tidak ada halaman di sini
+RewriteRule ^$ - [F,L]
+```
+
+> Jangan memakai `<FilesMatch>` + `Require all denied`: pada hosting dengan `AllowOverride`
+> terbatas direktif itu memicu **500 Internal Server Error**. Versi rewrite-only di atas aman.
+
+**Pilihan paling rapi (tetap disarankan):** kalau document root tidak bisa dipindah, pindahkan
+**isi folder `web/`** ke document root dan simpan proyek di luar document root, lalu ubah bagian
+`require` di `index.php` menunjuk ke lokasi proyek (mis. `/home/USER/itrust-api/vendor/autoload.php`,
+`/home/USER/itrust-api/config/web.php`) dan `$envFile` ke `/home/USER/itrust-api/.env`.
+
+**Setelah menyegel**, wajib lakukan rotasi kredensial karena `.env` sudah pernah terbaca publik:
+
+1. cPanel → *MySQL® Databases* → ubah password user DB; perbarui `.env`.
+2. Ganti `AUREUS_COOKIE_VALIDATION_KEY` dengan nilai acak baru.
+3. Hapus/putar ulang token: kosongkan tabel `personal_access_tokens` **saat tidak ada sesi aktif**
+   (`TRUNCATE personal_access_tokens;`) sehingga token lama tidak berlaku.
+4. Hapus isi `runtime/logs/*.log` bila pernah terekspos.
+
 ---
 
 ## 5. Import database

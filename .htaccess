@@ -1,2 +1,27 @@
-RewriteEngine on
-RewriteRule ^$ web/ [L]
+# ---------------------------------------------------------------------------
+# .htaccess di ROOT PROYEK — pengembangan lokal (Laragon dengan document root
+# menunjuk ke root proyek) sekaligus lapisan pengaman bila dipakai di hosting.
+#
+# DI HOSTING: cara terbaik tetap mengarahkan document root ke folder `web/`.
+# Kalau tidak bisa, berkas ini bisa disalin ke document root hosting sebagai
+# pengaman, dan base URL API menjadi `https://domain/subfolder/web/admin/api/v1`
+# (tidak masalah karena frontend memanggil API dari sisi server).
+# ---------------------------------------------------------------------------
+
+RewriteEngine On
+
+# 1) Tolak berkas sensitif berawalan titik (.env, .git, .htaccess, …)
+#    Pengecualian: /.well-known/ untuk verifikasi SSL (certbot).
+RewriteCond %{REQUEST_URI} !/\.well-known/
+RewriteRule (^|/)\. - [F,L]
+
+# 2) Tolak berkas dengan ekstensi sensitif
+RewriteRule \.(env|sql|log|md|lock|yml|yaml|neon|sh|ps1|bat|dist|json)$ - [F,L]
+
+# 3) Tolak folder internal & utilitas CLI
+RewriteRule ^(vendor|config|runtime|tests|scripts)(/|$) - [F,L]
+RewriteRule ^(yii|yii\.bat|requirements\.php|codeception\.yml|Vagrantfile|docker-compose\.yml)$ - [F,L]
+
+# 4) Root proyek ditolak (tidak ada halaman di sini). API ada di folder web/,
+#    mis. http://erp.local/aureuserp-yii2/web/admin/api/v1
+RewriteRule ^$ - [F,L]
