@@ -312,6 +312,42 @@ Cek juga:
 
 ---
 
+## 9.1 Beban resource tinggi (CPU/proses 100%) sampai situs menggantung
+
+Penyebab tersering di shared hosting:
+
+1. **PHP dijalankan sebagai CGI/suPHP** → **setiap request memakai 1 proses baru** (tanpa
+   opcache bersama). Beberapa request yang menggantung + lalu lintas bot sudah cukup membuat
+   kuota 30 proses habis → semua request menggantung.
+2. **Request menggantung menunggu database** (host/kredensial salah) — selama menunggu, satu
+   proses tetap terpakai sampai PHP menyerah.
+3. **Bot/pemindai** (`wp-login.php`, `phpinfo.php`, `php.ini`, `?C=M;O=A`) — kalau semua path
+   diteruskan ke `index.php`, setiap probe membangkitkan proses PHP penuh (boot Yii2).
+
+### Penanganan darurat (urutan)
+
+1. **cPanel → Resource Usage → Processes**: hentikan proses PHP yang menggantung
+   (*Kill*) atau restart layanan PHP dari panel.
+2. **Setel ulang `web/.htaccess`** ke versi di repo: pola pemindai bot (`wp-login.php`,
+   `phpinfo.php`, `php.ini`, …) kini dijawab **404 oleh Apache tanpa membangkitkan PHP**.
+   Bila document root sudah menunjuk tepat ke folder `web/`, versi paling ketat tersedia di
+   blok komentar berkas itu — hanya `/admin/api/v1` yang diteruskan ke PHP.
+3. Bila masih penuh, aktifkan **mode pemeliharaan** sementara (blok komentar di `web/.htaccess`):
+   hanya IP Anda yang boleh masuk, sisanya `503`.
+4. **Perbaiki Database**: `AUREUS_DB_HOST=localhost`, nama DB/user ber-prefix akun, dan
+   `PDO::ATTR_TIMEOUT => 5` di `config/db.php` supaya kegagalan DB cepat, bukan menggantung.
+5. **Ganti handler PHP ke PHP-FPM** (cPanel → *MultiPHP Manager* / *Select PHP Handler*) dan
+   aktifkan **OPcache** — proses jadi persisten, beban CPU turun drastis.
+6. **Taruh Cloudflare di depan domain** (proxy) untuk menyaring bot, membatasi laju, dan
+   menyembunyikan IP origin. Batasi juga `/admin/api/v1/login` dengan rate limit bila perlu.
+7. Hapus folder `.git` dan berkas diagnostik (`dbtest.php`, `phpinfo.php`) dari document root.
+
+### Verifikasi beban sudah normal
+
+- cPanel → Resource Usage: CPU/RAM/proses kembali di bawah ~30%.
+- `curl.exe -s https://api.domainmu.com/admin/api/v1` menjawab **< 1 detik**.
+- `curl.exe -i https://api.domainmu.com/wp-login.php` menjawab **404 cepat** (ditangani Apache).
+
 ## 10. Deploy ulang (update versi)
 
 ```bash
@@ -350,6 +386,7 @@ Di shared hosting tanpa SSH: upload berkas yang berubah, jalankan `composer inst
 | Cepat logout | `AUREUS_TOKEN_TTL_DAYS` kecil; token juga hilang bila tabel `personal_access_tokens` dibersihkan |
 | Aset/gambar 404 | `web/assets/` tidak writable atau belum dibuat |
 | `.env` bisa dibuka dari browser | Document root salah (harus `web/`) — segera perbaiki |
+| CPU / Physical Memory / Number of Processes di cPanel **100%** dan situs menggantung | Lihat §9.1 di bawah |
 
 ---
 

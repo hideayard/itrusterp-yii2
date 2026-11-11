@@ -1,62 +1,47 @@
-# ---------------------------------------------------------------------------
-# iTrustERP API — aturan Apache minimal untuk folder web/ (document root)
-#
-# Sengaja HANYA memakai direktif mod_rewrite: pada shared hosting dengan
-# `AllowOverride` terbatas, direktif seperti `Options`, `DirectoryIndex`, atau
-# `<FilesMatch>+Require` memicu "500 Internal Server Error".
-# ---------------------------------------------------------------------------
-
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
+    # -----------------------------------------------------------------------
     # 1) WAJIB: teruskan header Authorization ke PHP.
-    #    Di hosting dengan PHP sebagai CGI/FastCGI (umum di cPanel), Apache
-    #    membuang header `Authorization: Bearer ...` sehingga semua request
-    #    ber-token dijawab 401 Unauthorized.
+    #    Hosting dengan PHP CGI/suPHP membuang header `Authorization: Bearer ...`
+    #    sehingga semua request ber-token dijawab 401.
+    # -----------------------------------------------------------------------
     RewriteCond %{HTTP:Authorization} .
     RewriteRule ^ - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 
-    # 2) Pretty URL Yii2: request yang bukan berkas/folder nyata → index.php
+    # -----------------------------------------------------------------------
+    # 2) Tolak-cepat pola pemindai bot: dijawab Apache (murah) TANPA membangkitkan
+    #    proses PHP. Ini yang mencegah CPU/proses 100% saat akun dipindai terus.
+    # -----------------------------------------------------------------------
+    RewriteRule ^(wp-|wordpress|xmlrpc\.php|phpinfo\.php|php\.ini|php\.cgi|cgi-bin|admin\.php|wp-content|wp-includes|\.env) - [R=404,L]
+    RewriteRule \.(php\.[0-9]+|sql|bak|old|swp|git)$ - [R=404,L]
+
+    # -----------------------------------------------------------------------
+    # 3) Pretty URL Yii2: request bukan berkas/folder nyata → index.php
+    # -----------------------------------------------------------------------
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule . index.php [L]
 </IfModule>
 
 # ---------------------------------------------------------------------------
-# Opsional — aktifkan HANYA bila hosting mengizinkan (kalau tidak: 500).
+# Opsional (hanya bila document root = folder web/, mis. di hosting):
+# batasi PHP hanya untuk endpoint API — path lain 404 dari Apache.
 # ---------------------------------------------------------------------------
-# <IfModule mod_autoindex.c>
-#     Options -Indexes
-# </IfModule>
-# <IfModule mod_negotiation.c>
-#     Options -MultiViews
-# </IfModule>
-# DirectoryIndex index.php
-#
-# Perlindungan berkas sensitif (taruh .htaccess ini di DOCUMENT ROOT juga bila
-# document root terpaksa bukan folder web/):
-# <IfModule mod_authz_core.c>
-#     <FilesMatch "^\.|\.(env|sql|log|md|lock|yml|yaml|sh|ps1)$">
-#         Require all denied
-#     </FilesMatch>
-# </IfModule>
-#
-# Paksa HTTPS (pilih salah satu):
 # <IfModule mod_rewrite.c>
-#     RewriteCond %{HTTPS} off
-#     RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
-# </IfModule>
-# ...di belakang Cloudflare, pakai:
-# <IfModule mod_rewrite.c>
-#     RewriteCond %{HTTP:X-Forwarded-Proto} !https
-#     RewriteCond %{HTTPS} off
-#     RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+#     RewriteCond %{REQUEST_URI} ^/admin/api/v1(/|$)
+#     RewriteCond %{REQUEST_FILENAME} !-f
+#     RewriteRule . index.php [L]
+#     RewriteCond %{REQUEST_FILENAME} !-f
+#     RewriteCond %{REQUEST_FILENAME} !-d
+#     RewriteRule ^ - [R=404,L]
 # </IfModule>
 
 # ---------------------------------------------------------------------------
-# Catatan:
-# - JANGAN pakai `php_flag`/`php_value`: pada PHP-FPM/CGI memicu 500.
-# - Bila API dipasang di SUBFOLDER, tambahkan `RewriteBase /nama-subfolder/`.
-# - `web/index.php` dan `web/robots.txt` balas 500 = ada direktif di atas yang
-#   tidak diizinkan hosting → gunakan versi minimal (tanpa blok opsional).
+# Opsional — mode pemeliharaan sementara (saat akun kehabisan resource):
+# hanya IP ini yang boleh mengakses, sisanya 503.
 # ---------------------------------------------------------------------------
+# <IfModule mod_rewrite.c>
+#     RewriteCond %{REMOTE_ADDR} !^103\.153\.62\.30$
+#     RewriteRule ^ - [R=503,L]
+# </IfModule>
