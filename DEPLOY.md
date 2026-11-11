@@ -3,6 +3,9 @@
 Panduan langkah demi langkah menaruh API ini di hosting/VPS agar bisa dipakai frontend Astro
 (mis. Cloudflare Pages `itrust-erp`).
 
+> Alternatif tanpa hosting: menjalankan API **di laptop** dan mengeksposnya lewat
+> **Cloudflare Tunnel** — lihat [`TUNNEL.md`](./TUNNEL.md).
+
 Daftar isi:
 
 1. [Prasyarat](#1-prasyarat)
