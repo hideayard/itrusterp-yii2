@@ -11,6 +11,39 @@ use app\components\ApiController;
  */
 class MetaController extends ApiController
 {
+    /**
+     * Health check / info API di root `/admin/api/v1` (publik, tanpa token).
+     */
+    protected function publicActions(): array
+    {
+        return ['index'];
+    }
+
+    public function actionIndex()
+    {
+        $database = 'connected';
+        try {
+            Yii::$app->db->createCommand('SELECT 1')->queryScalar();
+        } catch (\Throwable $e) {
+            $database = 'unreachable';
+        }
+
+        return [
+            'data' => [
+                'name' => 'iTrustERP API',
+                'status' => $database === 'connected' ? 'ok' : 'degraded',
+                'database' => $database,
+                'version' => '1.0.0',
+                'time' => gmdate('c'),
+                'endpoints' => [
+                    'login' => '/admin/api/v1/login',
+                    'resources' => '/admin/api/v1/system/resources',
+                    'example' => '/admin/api/v1/products/products',
+                ],
+            ],
+        ];
+    }
+
     public function actionResources()
     {
         $registry = require Yii::getAlias('@app/config/resources.php');
