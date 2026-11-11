@@ -1,4 +1,95 @@
-RewriteEngine on
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteRule . index.php [L]
+# ---------------------------------------------------------------------------
+# iTrustERP API — aturan Apache untuk folder web/ (document root produksi)
+# ---------------------------------------------------------------------------
+
+# Jangan tampilkan daftar isi folder, dan matikan MultiViews (mengganggu routing Yii2).
+<IfModule mod_autoindex.c>
+    Options -Indexes
+</IfModule>
+<IfModule mod_negotiation.c>
+    Options -MultiViews
+</IfModule>
+
+DirectoryIndex index.php
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # -----------------------------------------------------------------------
+    # 1) PENTING: teruskan header Authorization ke PHP.
+    #    Di hosting dengan PHP berjalan sebagai CGI/FastCGI (umum di cPanel),
+    #    Apache membuang header `Authorization: Bearer ...` sehingga SEMUA
+    #    request ber-token dijawab 401 Unauthorized. Dua baris ini menyalinnya
+    #    ke variabel lingkungan HTTP_AUTHORIZATION yang dibaca Yii2.
+    # -----------------------------------------------------------------------
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule ^ - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    <IfModule mod_setenvif.c>
+        SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+    </IfModule>
+
+    # -----------------------------------------------------------------------
+    # 2) Pretty URL Yii2: request yang bukan berkas/folder nyata → index.php
+    # -----------------------------------------------------------------------
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule . index.php [L]
+</IfModule>
+
+# ---------------------------------------------------------------------------
+# 3) Tolak akses berkas sensitif — jaring pengaman bila document root keliru
+#    (mis. diarahkan ke root proyek sehingga .env bisa diunduh).
+# ---------------------------------------------------------------------------
+<IfModule mod_authz_core.c>
+    <FilesMatch "^\.|\.(env|sql|log|md|lock|json|ini|yml|yaml|sh|ps1)$">
+        Require all denied
+    </FilesMatch>
+</IfModule>
+<IfModule !mod_authz_core.c>
+    <FilesMatch "^\.|\.(env|sql|log|md|lock|json|ini|yml|yaml|sh|ps1)$">
+        Order allow,deny
+        Deny from all
+    </FilesMatch>
+</IfModule>
+
+# ---------------------------------------------------------------------------
+# 4) (Opsional) Paksa HTTPS. Aktifkan salah satu sesuai topologi.
+# ---------------------------------------------------------------------------
+# A. API diakses langsung ke server ini (tanpa proxy Cloudflare):
+# <IfModule mod_rewrite.c>
+#     RewriteCond %{HTTPS} off
+#     RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+# </IfModule>
+#
+# B. API di belakang Cloudflare (awan oranye) — Cloudflare meneruskan ke origin
+#    lewat HTTP, jadi cek X-Forwarded-Proto agar tidak terjadi redirect berulang:
+# <IfModule mod_rewrite.c>
+#     RewriteCond %{HTTP:X-Forwarded-Proto} !https
+#     RewriteCond %{HTTPS} off
+#     RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+# </IfModule>
+
+# ---------------------------------------------------------------------------
+# 5) (Opsional) Cache aset statis — hanya relevan bila web/ juga menyajikan
+#    gambar/CSS/JS. Endpoint API berupa JSON dan tidak boleh di-cache.
+# ---------------------------------------------------------------------------
+# <IfModule mod_expires.c>
+#     ExpiresActive On
+#     ExpiresByType image/svg+xml "access plus 30 days"
+#     ExpiresByType image/png "access plus 30 days"
+#     ExpiresByType text/css "access plus 30 days"
+#     ExpiresByType application/javascript "access plus 30 days"
+# </IfModule>
+
+# ---------------------------------------------------------------------------
+# Catatan:
+# - JANGAN pakai `php_flag`/`php_value` di sini: pada PHP-FPM (mod_proxy_fcgi)
+#   baris tersebut memicu 500 Internal Server Error. Atur lewat .env / panel.
+# - Bila API dipasang di SUBFOLDER (mis. https://domain.com/api/), tambahkan
+#   `RewriteBase /api/` di dalam blok mod_rewrite.
+# - Bila muncul 500/403 yang menyebut SymLinksIfOwnerMatch, tambahkan
+#   `Options +FollowSymLinks` (hanya bila AllowOverride mengizinkan Options).
+# - Pada Nginx, berkas ini diabaikan; gunakan `try_files $uri $uri/ /index.php$is_args$args`
+#   dan `fastcgi_param HTTP_AUTHORIZATION $http_authorization;` bila token ikut hilang.
+# ---------------------------------------------------------------------------

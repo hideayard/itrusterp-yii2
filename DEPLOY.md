@@ -101,6 +101,10 @@ server {
     location ~ \.php$ {
         include snippets/fastcgi-php.conf;
         fastcgi_pass unix:/run/php/php8.2-fpm.sock;
+
+        # WAJIB: teruskan header Authorization ke PHP, kalau tidak semua request
+        # ber-token (Bearer) akan dijawab 401 Unauthorized.
+        fastcgi_param HTTP_AUTHORIZATION $http_authorization;
     }
 
     location ~ /\.(?!well-known) { deny all; }   # blokir .env dll
@@ -270,6 +274,8 @@ Di shared hosting tanpa SSH: upload berkas yang berubah, jalankan `composer inst
 | `Unknown column ...` | Dump DB tidak sesuai versi skema — impor ulang dump terbaru |
 | `Could not open input file: vendor/autoload.php` | Belum `composer install` |
 | Error PHP “requires 8.2” | Naikkan versi PHP di hosting (MultiPHP Manager) |
+| **Semua request ber-token dijawab `401`** walau token benar | Header `Authorization` dibuang oleh web server: Apache/CGI → pastikan blok pass-through di `web/.htaccess` ada; Nginx → tambahkan `fastcgi_param HTTP_AUTHORIZATION $http_authorization;`. Uji: `curl -i -H "Authorization: Bearer x" ...` lalu cek apakah `$_SERVER['HTTP_AUTHORIZATION']` terisi |
+| Redirect berulang ke HTTPS | API di belakang Cloudflare: pakai varian `RewriteCond %{HTTP:X-Forwarded-Proto} !https` di `web/.htaccess`, atau set SSL mode Cloudflare ke **Full (strict)** |
 | Login 200 tapi daftar data kosong | Scope perusahaan/ownership: cek `company_id` user & data, atau gunakan akun dengan role `Admin` |
 | CORS error di browser | Isi `AUREUS_CORS_ORIGINS` dengan origin frontend (hanya bila klien memanggil API langsung) |
 | Cepat logout | `AUREUS_TOKEN_TTL_DAYS` kecil; token juga hilang bila tabel `personal_access_tokens` dibersihkan |
