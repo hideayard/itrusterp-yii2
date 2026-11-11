@@ -198,6 +198,10 @@ AUREUS_TOKEN_TTL_DAYS=90
 ## 7. Verifikasi
 
 ```powershell
+# 0) Health check tanpa token — membuktikan rewrite + koneksi DB sudah benar
+curl.exe -i https://api.domainmu.com/admin/api/v1
+# harapan: 200 JSON {"data":{"name":"iTrustERP API","status":"ok","database":"connected",...}}
+
 # 1) Login harus menjawab JSON + token
 curl.exe -i -X POST https://api.domainmu.com/admin/api/v1/login `
   -H "Content-Type: application/json" `
@@ -297,6 +301,7 @@ Di shared hosting tanpa SSH: upload berkas yang berubah, jalankan `composer inst
 - [ ] `.env` terisi: DB, `YII_ENV=prod`, kunci cookie acak
 - [ ] Database + user dibuat, dump diimpor, `scripts/seed-roles.php` dijalankan (bila perlu)
 - [ ] `runtime/` dan `web/assets/` writable oleh user web server
+- [ ] `GET /admin/api/v1` → 200 JSON `status: ok` (health check)
 - [ ] `POST /admin/api/v1/login` → 200 + token JSON
 - [ ] `GET /admin/api/v1/products/products` tanpa token → 401 JSON
 - [ ] HTTPS aktif (certbot/Cloudflare) dan redirect 80 → 443

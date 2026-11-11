@@ -97,6 +97,7 @@ Semua di bawah prefix `/admin/api/v1` (sama persis dengan `routes/api.php` tiap 
 
 | Resource | Method / Path | Soft delete |
 |---|---|---|
+| Health / info | `GET /admin/api/v1` (publik, tanpa token) — balas `{"data":{"status":"ok","database":"connected",…}}` | — |
 | Auth | `POST login`, `POST logout` | — |
 | Currencies | `GET/POST currencies`, `GET/PUT/PATCH/DELETE currencies/{id}` | tidak |
 | Currency rates | `.../currencies/{currency_id}/rates` (+ `{id}`) | tidak |
