@@ -129,12 +129,15 @@ sudo certbot --nginx -d api.domainmu.com
    (mis. `/home/user/itrust-api`), lalu Extract. Atau pakai **Git™ Version Control** di cPanel.
 2. **Dependensi**: kalau ada akses SSH → `composer install --no-dev --optimize-autoloader`.
    Kalau tidak: jalankan di lokal, lalu upload folder `vendor/` hasilnya.
-3. **Document root**: cPanel → *Domains* → buat subdomain `api` → set **Document Root** ke
-   `/home/user/itrust-api/web`.
-   Kalau hosting tidak mengizinkan document root di luar `public_html`, alternatifnya: taruh
-   seluruh proyek di `/home/user/itrust-api` dan buat `public_html` sebagai symlink ke
-   `itrust-api/web` (`ln -s`), atau pindahkan isi `web/` ke `public_html` lalu sesuaikan
-   `require` path di `index.php` (`__DIR__ . '/../itrust-api/vendor/autoload.php'`).
+3. **Document root**: cPanel → *Domains* → pilih subdomain → **Document Root** diarahkan ke
+   **`/home/user/itrust-api/web`** (WAJIB). Kalau kolom Document Root tidak bisa diubah ke luar
+   `public_html`, opsi alternatif:
+   - taruh proyek di luar `public_html`, lalu isi `public_html` dengan isi folder `web/`
+     (`index.php`, `.htaccess`, `css/`, `js/`, `images/`, `assets/`) dan ubah baris `require`
+     di `index.php` menjadi `__DIR__ . '/../itrust-api/vendor/autoload.php'`; atau
+   - buat `public_html` sebagai symlink ke `itrust-api/web` (`ln -s`).
+   > **Cek cepat**: buka `https://subdomain.domainmu.com/.env` — harus **403/404**. Kalau
+   > terbaca (200), document root salah dan kredensial DB ikut terekspos.
 4. **PHP version**: cPanel → *MultiPHP Manager* → pilih **8.2+** untuk subdomain tersebut.
 5. **`.env`**: buat via File Manager (Copy dari `.env.example`) dan isi nilainya.
 6. **Permission**: `runtime/` dan `web/assets/` → **775** (atau 755 bila suid/permission ketat).
@@ -276,6 +279,8 @@ Di shared hosting tanpa SSH: upload berkas yang berubah, jalankan `composer inst
 | Error PHP “requires 8.2” | Naikkan versi PHP di hosting (MultiPHP Manager) |
 | **Semua request ber-token dijawab `401`** walau token benar | Header `Authorization` dibuang oleh web server: Apache/CGI → pastikan blok pass-through di `web/.htaccess` ada; Nginx → tambahkan `fastcgi_param HTTP_AUTHORIZATION $http_authorization;`. Uji: `curl -i -H "Authorization: Bearer x" ...` lalu cek apakah `$_SERVER['HTTP_AUTHORIZATION']` terisi |
 | Redirect berulang ke HTTPS | API di belakang Cloudflare: pakai varian `RewriteCond %{HTTP:X-Forwarded-Proto} !https` di `web/.htaccess`, atau set SSL mode Cloudflare ke **Full (strict)** |
+| Berkas statis (`/web/index.php`, `robots.txt`) balas `500` | Ada direktif `.htaccess` yang tidak diizinkan `AllowOverride` (`Options`, `DirectoryIndex`, `<FilesMatch>`/`Require`). Pakai `web/.htaccess` versi minimal — hanya blok `mod_rewrite` |
+| `.env`, `composer.json`, `vendor/`, `yii` bisa diunduh | Document root masih menunjuk **root proyek**, bukan `web/`. Perbaiki document root, lalu **rotasi kredensial DB + `AUREUS_COOKIE_VALIDATION_KEY`** karena sudah terekspos |
 | Login 200 tapi daftar data kosong | Scope perusahaan/ownership: cek `company_id` user & data, atau gunakan akun dengan role `Admin` |
 | CORS error di browser | Isi `AUREUS_CORS_ORIGINS` dengan origin frontend (hanya bila klien memanggil API langsung) |
 | Cepat logout | `AUREUS_TOKEN_TTL_DAYS` kecil; token juga hilang bila tabel `personal_access_tokens` dibersihkan |
