@@ -1,7 +1,7 @@
-# iTrustERP Yii2 API (`aureuserp-yii2`)
+# iTrustERP Yii2 API (`itrusterp-yii2`)
 
-Backend REST API untuk **iTrustERP** — hasil migrasi dari `aureuserp-master` (Laravel 13 + Filament 5).
-Dipakai oleh frontend **Astro**. Database **dipakai ulang** (schema `aureuserp` yang sama,
+Backend REST API untuk **iTrustERP** — hasil migrasi dari `itrusterp-master` (Laravel 13 + Filament 5).
+Dipakai oleh frontend **Astro**. Database **dipakai ulang** (schema `itrusterp` yang sama,
 tanpa migrasi ulang), sehingga data yang sudah ada tetap jalan.
 
 - Framework: **Yii2 2.0.55** (API-only, tanpa view)
@@ -14,7 +14,7 @@ tanpa migrasi ulang), sehingga data yang sudah ada tetap jalan.
 ## 1. Kebutuhan
 
 - PHP **8.2+** (diuji di 8.3.16)
-- MySQL/MariaDB dengan database `aureuserp` (dari iTrustERP)
+- MySQL/MariaDB dengan database `itrusterp` (dari iTrustERP)
 - Composer `vendor/` sudah terpasang
 
 ## 2. Konfigurasi Database
@@ -24,7 +24,7 @@ tanpa migrasi ulang), sehingga data yang sudah ada tetap jalan.
 | Env | Default |
 |---|---|
 | `AUREUS_DB_HOST` | `localhost` |
-| `AUREUS_DB` | `aureuserp` |
+| `AUREUS_DB` | `itrusterp` |
 | `AUREUS_DB_USER` | `root` |
 | `AUREUS_DB_PASSWORD` | *(kosong)* |
 
@@ -35,14 +35,14 @@ Sesi MySQL dipaksa `time_zone = '+00:00'` (via `PDO::MYSQL_ATTR_INIT_COMMAND`) a
 **A. PHP built-in server (paling cepat):**
 
 ```powershell
-cd E:\laragon6\www\ERP\aureuserp-yii2
+cd E:\laragon6\www\ERP\itrusterp-yii2
 php -S 127.0.0.1:8899 -t web web/index.php
 ```
 
 **B. Lewat Apache Laragon** (`web/.htaccess` sudah disediakan):
 
 ```
-http://localhost/ERP/aureuserp-yii2/web/admin/api/v1/...
+http://localhost/ERP/itrusterp-yii2/web/admin/api/v1/...
 ```
 
 **C. `yii serve`:** `php yii serve --port=8899 --docroot=@app/web`
@@ -682,7 +682,7 @@ const partners = await fetch(`${API}/partners/partners?include=country,state&per
     (d) UI Astro belum punya tombol post (endpoint API dulu).
 73. **Accounts (data demo)**: DB asli berisi `INV/2026/00001` (draft) dan `BILL/2026/00001` (draft)
     dari modul Sales/Purchases — keduanya belum diposting; uji posting dilakukan di DB klon
-    (`aureuserp_acc_test`, sudah dihapus) dengan hasil balance 180/180 dan 150/150.
+    (`itrusterp_acc_test`, sudah dihapus) dengan hasil balance 180/180 dan 150/150.
 74. **POS — layar kasir (UI)**: `catalog` sekarang ikut mengembalikan `payment_methods`
     (`id`, `name`, `is_cash_count`) agar UI bisa merender metode bayar. Endpoint baru di sisi Astro:
     `POST /api/pos/checkout` (meneruskan ke `orders/sync`, token tetap server-side).
@@ -694,9 +694,9 @@ const partners = await fetch(`${API}/partners/partners?include=country,state&per
 ## 12. Struktur Proyek
 
 ```
-aureuserp-yii2/
+itrusterp-yii2/
 ├─ config/
-│  ├─ db.php            # koneksi DB (env-driven: AUREUS_DB, default "aureuserp")
+│  ├─ db.php            # koneksi DB (env-driven: AUREUS_DB, default "itrusterp")
 │  ├─ web.php           # app API-only (JSON, pretty URL, CORS, error handler, strict parsing)
 │  ├─ console.php       # app console (dipakai script uji / pembuatan token)
 │  ├─ resources.php     # REGISTRY resource (sumber kebenaran endpoint)
@@ -750,7 +750,7 @@ Accounts, receipt/delivery yang menggerakkan stok mengikuti sumber).
 
 ## 14. Cara Menambah Modul / Resource Baru
 
-1. **Cek sumber (lookup saja, jangan dijalankan)** di `../BACKUP/aureuserp-master/plugins/<vendor>/<plugin>/`:
+1. **Cek sumber (lookup saja, jangan dijalankan)** di `../BACKUP/itrusterp-master/plugins/<vendor>/<plugin>/`:
    `src/Models/*` + `src/Http/Resources/V1/*` untuk bentuk field & cast, `routes/api.php` untuk endpoint,
    dan tabel `permissions` di DB untuk nama permission asli.
 2. **Model** di `models/` (`extends app\components\BaseModel`):
@@ -799,13 +799,13 @@ php -r "define('YII_DEBUG',true); require 'vendor/autoload.php'; require 'vendor
   echo count(require 'config/resources.php'), ' resources / ',
        count(require 'config/routes.php'), ' routes', PHP_EOL;"
 
-# 3) jalankan API (default DB 'aureuserp'; set AUREUS_DB untuk DB lain)
+# 3) jalankan API (default DB 'itrusterp'; set AUREUS_DB untuk DB lain)
 php -S 0.0.0.0:8899 -t web web/index.php
 ```
 
-**Uji di DB klon (wajib sebelum menyentuh DB asli):** buat klon `mysqldump iTrustERP | mysql aureuserp_<x>_test`,
-set password user 1, jalankan API dengan `$env:AUREUS_DB='aureuserp_<x>_test'`, uji, lalu
-`DROP DATABASE aureuserp_<x>_test` dan pastikan `personal_access_tokens` kembali 0.
+**Uji di DB klon (wajib sebelum menyentuh DB asli):** buat klon `mysqldump iTrustERP | mysql itrusterp_<x>_test`,
+set password user 1, jalankan API dengan `$env:AUREUS_DB='itrusterp_<x>_test'`, uji, lalu
+`DROP DATABASE itrusterp_<x>_test` dan pastikan `personal_access_tokens` kembali 0.
 
 Catatan penting yang sering bikin bingung:
 
@@ -845,7 +845,7 @@ Data contoh `BACKUP/toko-meka/example/products.csv` (�32.000 baris, 32 kolom) 
 `products_products` melalui skrip idempoten:
 
 ```powershell
-cd E:\laragon6\www\ERP\aureuserp-yii2
+cd E:\laragon6\www\ERP\itrusterp-yii2
 php scripts/import-toko-meka-products.php            # import penuh
 php scripts/import-toko-meka-products.php --limit=200  # uji sebagian
 ```

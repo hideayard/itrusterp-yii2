@@ -1,7 +1,7 @@
 {
-    "name": "aureuserp/yii2-api",
+    "name": "itrusterp/yii2-api",
     "description": "iTrustERP REST API backend on Yii2 (migrated from the Laravel/Filament app)",
-    "keywords": ["yii2", "aureuserp", "erp", "rest", "api"],
+    "keywords": ["yii2", "itrusterp", "erp", "rest", "api"],
     "type": "project",
     "license": "MIT",
     "support": {
