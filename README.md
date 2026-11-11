@@ -904,3 +904,17 @@ perubahan ini hanya membuat relasi menampilkan baris yang memang direferensikan.
 Cara mendiagnosa cepat: jika kolom relasi tampil `—` padahal kolom FK terisi, periksa
 (a) apakah baris tujuan **soft-deleted** (`deleted_at`), dan (b) apakah scope akses
 memfilter baris tersebut.
+
+## 18. Deploy
+
+Panduan lengkap ada di **[`DEPLOY.md`](./DEPLOY.md)**: prasyarat (PHP ≥ 8.2, MySQL 8), dua opsi
+hosting (VPS Nginx + PHP-FPM dan shared hosting cPanel), impor database, konfigurasi `.env`,
+verifikasi endpoint, integrasi Cloudflare Pages, hardening, deploy ulang, dan troubleshooting.
+
+Poin yang paling sering bikin gagal:
+
+- **Document root harus diarahkan ke `web/`** — kalau ke root proyek, `.env`/`config/`/`vendor/`
+  bisa diunduh siapa pun.
+- `.env` dimuat otomatis oleh `web/index.php`, jadi tidak perlu menyetel env di Nginx/PHP-FPM.
+- Set `YII_ENV=prod` di produksi agar `YII_DEBUG` mati (stack trace tidak bocor ke klien).
+- `runtime/` dan `web/assets/` harus writable oleh user web server.

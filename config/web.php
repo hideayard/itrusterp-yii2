@@ -14,7 +14,7 @@ $config = [
     ],
     'components' => [
         'request' => [
-            'cookieValidationKey' => 'itrust-api-local',
+            'cookieValidationKey' => (string) (getenv('AUREUS_COOKIE_VALIDATION_KEY') ?: 'itrust-api-local'),
             'parsers' => [
                 'application/json' => \yii\web\JsonParser::class,
             ],
