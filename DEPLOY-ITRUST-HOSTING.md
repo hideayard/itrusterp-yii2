@@ -282,6 +282,42 @@ curl.exe -s -o NUL -w "%{http_code} %{time_total}s" https://domainmu.com/web/ea/
 
 ---
 
+### 5.6 Optimasi beban endpoint EA (`/web/ea/get`)
+
+Endpoint ini dipanggil **setiap detik** oleh setiap EA, sehingga jadi sumber CPU terbesar.
+Tiga perbaikan berikut sudah diterapkan di project lokal — ikutkan saat deploy:
+
+1. **Indeks tabel `close_order`** — tanpa indeks kedua query `EaController::actionGet`
+   melakukan full table scan:
+
+   ```sql
+   ALTER TABLE close_order
+     ADD INDEX idx_account_status_exp (order_account, order_status, expired_date),
+     ADD INDEX idx_status_exp (order_status, expired_date);
+   ```
+   Berkas: `sql/close_order_indexes.sql` (jalankan sekali; error 1061 = indeks sudah ada).
+   EXPLAIN: `type=ALL` → **`range`**, baris diperiksa 375 → 1.
+
+2. **Query lebih ringan** di `EaController::actionGet`:
+   - `select()` hanya kolom yang dipakai (bukan `*`),
+   - `limit(50)` pada kedua query,
+   - cek `exists()` murah sebelum menarik daftar order multi-account.
+
+3. **Fast-404 bot** di `web/.htaccess` (sebelum rewrite ke `index.php`) — probe seperti
+   `wp-login.php`, `phpinfo.php`, `php.ini`, `cgi-bin`, `*.sql`, `*.zip` tidak lagi membangkitkan PHP:
+
+   ```apache
+   RewriteRule ^(wp-|wordpress|xmlrpc\.php|phpinfo\.php|php\.ini|cgi-bin|admin\.php|wp-content|wp-includes|\.env) - [R=404,L]
+   RewriteRule \.(sql|bak|old|zip|log|env|md|lock|yml|yaml|sh|ps1)$ - [R=404,L]
+   ```
+
+Hasil uji lokal: `/ea/get` **0,12 s** (www) dan **0,19 s** (OLD), JSON tetap benar;
+probe bot **404 dalam 0,01–0,02 s**.
+
+> Tetap disarankan menurunkan interval polling EA (5–10 detik) dan memakai **PHP-FPM + OPcache**.
+> Dengan suPHP, setiap request = satu proses; 30 proses ≈ 1 GB RAM, jadi hosting mudah kehabisan
+> memori walau query sudah cepat.
+
 ## 6. Permission
 
 Lewat File Manager (atau SSH):
