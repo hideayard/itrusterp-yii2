@@ -51,6 +51,10 @@ function copyDir(string $from, string $to): int
 echo "sumber : $src\n";
 echo "tujuan : $dest\n";
 
+// Simpan berkas kredensial lokal (di-gitignore) agar tidak hilang saat modul dibuat ulang.
+$keepLocalDb = $dest . '/config/db.local.php';
+$savedLocalDb = is_file($keepLocalDb) ? file_get_contents($keepLocalDb) : null;
+
 erase($dest);
 mkdir($dest, 0775, true);
 @mkdir($dest . '/runtime/logs', 0775, true);
@@ -227,5 +231,11 @@ PHP);
 
 file_put_contents($dest . '/.gitignore', "runtime/*\n!runtime/.gitkeep\nconfig/db.local.php\n");
 file_put_contents($dest . '/runtime/.gitkeep', '');
+
+if ($savedLocalDb !== null) {
+    @mkdir(dirname($keepLocalDb), 0775, true);
+    file_put_contents($keepLocalDb, $savedLocalDb);
+    echo "config/db.local.php dipertahankan\n";
+}
 
 echo "Module.php + config dibuat\nselesai.\n";
