@@ -188,6 +188,44 @@ RewriteRule ^(gii|debug)(/|$) - [R=404,L]
 Jika kedua cara tidak terbaca (PHP-FPM `clear_env=on`), hardcode di `web/index.php`:
 `YII_DEBUG=false`, `YII_ENV='prod'`.
 
+### 5.4 Muat route ERP hanya saat diperlukan (penting untuk endpoint yang dipanggil terus-menerus)
+
+Modul ERP mendaftarkan **ratusan UrlRule**. Jika `config/web.php` selalu me-merge seluruh route ERP,
+setiap request iTrust (termasuk **endpoint EA** `/web/ea/get` yang dipanggil tiap detik oleh banyak
+akun) membayar biaya itu — CPU naik dan request bisa menggantung saat kuota proses hosting penuh.
+
+`config/web.php` harus memuat route ERP **kondisional**:
+
+```php
+$params = require __DIR__ . '/params.php';
+$db = require __DIR__ . '/db.php';
+
+$erpRequest = (bool) preg_match('#(^|/)erp/api/v1(/|$)#', (string) ($_SERVER['REQUEST_URI'] ?? ''));
+
+// ...
+'urlManager' => [
+    'rules' => array_merge(
+        [ /* aturan iTrust */ ],
+        $erpRequest ? require __DIR__ . '/../modules/erp/config/routes.php' : []
+    ),
+],
+```
+
+Hasil uji lokal setelah perubahan: `/site/login` **0,12–0,18 s**, `/ea/get` **0,08 s**,
+`/erp/api/v1` **0,12 s** (health `ok`).
+
+Cara membedakan masalah di hosting:
+
+```powershell
+curl.exe -s -o NUL -w "%{http_code} %{time_total}s" https://domainmu.com/web/robots.txt   # statis
+curl.exe -s -o NUL -w "%{http_code} %{time_total}s" https://domainmu.com/web/ea/get       # PHP
+```
+
+- statis **200 cepat**, PHP **menggantung** → Apache sehat; masalah di **PHP/proses** (kuota proses
+  habis, debug masih aktif, atau request menumpuk). Cek cPanel → *Resource Usage* dan log error
+  untuk `mod_fcgid: can't apply process slot` / `AH01276`.
+- keduanya lambat → masalah server/hosting (bukan aplikasi).
+
 ---
 
 ## 6. Permission
@@ -283,6 +321,7 @@ lalu hapus isi `runtime/cache/` dan `modules/erp/runtime/cache/`.
 | Semua request ber-token `401` | Header `Authorization` dibuang CGI/suPHP → pastikan baris pass-through ada di `web/.htaccess` |
 | Halaman iTrust error setelah menambah modul | Cek `config/web.php`: `require __DIR__ . '/../modules/erp/config/routes.php'` (bukan `require '@erp/...'`) |
 | CPU/proses 100% | Bot scanner + CGI; lihat `DEPLOY.md` §9.1 (rate limit, matikan debug, PHP-FPM, Cloudflare) |
+| Endpoint EA (`/web/ea/get`) menggantung padahal berkas statis cepat | PHP kehabisan proses / debug masih aktif / route ERP dimuat di setiap request → terapkan §5.3 dan §5.4, lalu cek *Resource Usage* |
 | Login 422 | Body JSON tidak terbaca → pastikan modul terbaru (mendaftarkan `JsonParser`) |
 | Log berisi `yii\debug\Module::checkAccess` + rekaman `$_POST/$_SERVER` tiap request | `YII_DEBUG` masih `true` di produksi → tambahkan `SetEnv YII_ENV prod` + `SetEnv YII_DEBUG false` di `web/.htaccess`; `gii`/`debug` otomatis mati |
 | `/web/gii` dapat diakses publik | Sama seperti di atas; tambahkan juga `RewriteRule ^(gii|debug)(/|$) - [R=404,L]` |
