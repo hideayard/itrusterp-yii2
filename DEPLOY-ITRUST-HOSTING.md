@@ -121,18 +121,29 @@ di Laragon (subfolder `/OLD/itrust/`). Hasil uji: `/.env`, `/config/db.php`,
 `/`, `/web/site/login`, `/web/erp/api/v1` → **200**.
 
 ### 5.1 Database iTrust — `config/db.php`
-Berkas ini **gitignored**, jadi harus dibuat/diedit langsung di server:
+Berkas ini **gitignored**, jadi harus dibuat/diedit langsung di server. Bentuk paling umum
+(mis. memakai variabel `$dbname/$dbuser/$dbpass`) cukup ditambah **satu blok `attributes`**:
 
 ```php
 <?php
 return [
-    'class' => \yii\db\Connection::class,
-    'dsn' => 'mysql:host=localhost;dbname=<akun>_itrust',
-    'username' => '<akun>_itrust',
-    'password' => 'PASSWORD_DB_ITRUST',
-    'charset' => 'utf8mb4',
+    'class' => 'yii\db\Connection',
+    'dsn' => 'mysql:host=localhost;dbname=' . $dbname,
+    'username' => $dbuser,
+    'password' => $dbpass,
+    'charset' => 'utf8',
+
+    // Gagal cepat bila DB lambat/tidak merespons (default: menunggu sampai
+    // max_execution_time -> proses PHP tertahan -> kuota proses hosting habis).
+    'attributes' => [
+        PDO::ATTR_TIMEOUT => 5,
+    ],
 ];
 ```
+
+> Di iTrust **jangan** menambahkan `PDO::MYSQL_ATTR_INIT_COMMAND => "SET time_zone='+00:00'"`.
+> Zona waktu server sudah `Asia/Jakarta`; memaksakan UTC akan menggeser tampilan tanggal/jam.
+> (Modul ERP memakai UTC karena memang dirancang begitu — itu di koneksinya sendiri.)
 
 ### 5.2 Database ERP — `web/.htaccess` (disarankan, tahan regenerasi modul)
 
