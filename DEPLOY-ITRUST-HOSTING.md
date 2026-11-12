@@ -114,22 +114,37 @@ Modul membaca variabel ini lewat `getenv()` **dan** `$_SERVER` (lihat
 > edit langsung `modules/erp/config/db.php` dan isi kredensialnya. Ingat: berkas itu
 > **tertimpa** saat modul diregenerasi — catat nilainya.
 
-### 5.3 Mode produksi — `web/index.php`
-iTrust masih meng-hardcode mode dev:
+### 5.3 Mode produksi — `web/.htaccess` (disarankan)
 
-```php
-defined('YII_DEBUG') or define('YII_DEBUG', true);
-defined('YII_ENV') or define('YII_ENV', 'dev');
+`web/index.php` iTrust membaca environment (default `dev` untuk lokal). Di hosting cukup
+tambahkan dua baris ini ke `web/.htaccess`:
+
+```apache
+SetEnv YII_ENV prod
+SetEnv YII_DEBUG false
 ```
 
-Ubah menjadi:
+Efeknya: **debugger (`yii\debug`) dan `gii` tidak dimuat**, dan log berhenti merekam
+`$_POST`/`$_SERVER` setiap request — inilah penyebab log berisi:
+
+```
+[yii\debug\Module::checkAccess] Access to debugger is denied due to IP address restriction...
+[info][application] $_POST = [ ... ]  $_SERVER = [ ... ]
+```
+
+Jika `SetEnv` tidak diteruskan oleh hosting (PHP-FPM dengan `clear_env=on`), ubah manual
+`web/index.php`:
 
 ```php
 defined('YII_DEBUG') or define('YII_DEBUG', false);
 defined('YII_ENV') or define('YII_ENV', 'prod');
 ```
 
-(Tanpa ini, stack trace & detail konfigurasi bisa tampil ke pengunjung saat terjadi error.)
+Tambahan pengaman (opsional) di `web/.htaccess` — tolak akses langsung ke generator/debugger:
+
+```apache
+RewriteRule ^(gii|debug)(/|$) - [R=404,L]
+```
 
 ---
 
@@ -227,6 +242,8 @@ lalu hapus isi `runtime/cache/` dan `modules/erp/runtime/cache/`.
 | Halaman iTrust error setelah menambah modul | Cek `config/web.php`: `require __DIR__ . '/../modules/erp/config/routes.php'` (bukan `require '@erp/...'`) |
 | CPU/proses 100% | Bot scanner + CGI; lihat `DEPLOY.md` §9.1 (rate limit, matikan debug, PHP-FPM, Cloudflare) |
 | Login 422 | Body JSON tidak terbaca → pastikan modul terbaru (mendaftarkan `JsonParser`) |
+| Log berisi `yii\debug\Module::checkAccess` + rekaman `$_POST/$_SERVER` tiap request | `YII_DEBUG` masih `true` di produksi → tambahkan `SetEnv YII_ENV prod` + `SetEnv YII_DEBUG false` di `web/.htaccess`; `gii`/`debug` otomatis mati |
+| `/web/gii` dapat diakses publik | Sama seperti di atas; tambahkan juga `RewriteRule ^(gii|debug)(/|$) - [R=404,L]` |
 
 ---
 
