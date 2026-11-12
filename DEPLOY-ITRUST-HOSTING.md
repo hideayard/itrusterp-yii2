@@ -365,6 +365,8 @@ lalu hapus isi `runtime/cache/` dan `modules/erp/runtime/cache/`.
 | Halaman iTrust error setelah menambah modul | Cek `config/web.php`: `require __DIR__ . '/../modules/erp/config/routes.php'` (bukan `require '@erp/...'`) |
 | CPU/proses 100% | Bot scanner + CGI; lihat `DEPLOY.md` §9.1 (rate limit, matikan debug, PHP-FPM, Cloudflare) |
 | Endpoint EA (`/web/ea/get`) menggantung padahal berkas statis cepat | PHP kehabisan proses / debug masih aktif / route ERP dimuat di setiap request → terapkan §5.3 dan §5.4, lalu cek *Resource Usage* |
+| Halaman tertentu menggantung (review Google, enroll course) | Panggilan keluar tanpa timeout: `helpers/CustomHelper.php` (cURL Google reviews) dan `views/site/enroll.php` (`getDuration` → YouTube API). Sudah ditambahi `CURLOPT_CONNECTTIMEOUT/CURLOPT_TIMEOUT` (5 s/10 s) dan `http.timeout` (5–10 s) + guard hasil `false` |
+| Semua request lambat lalu 500 | `config/db.php` tanpa batas waktu koneksi → tambahkan `'attributes' => [PDO::ATTR_TIMEOUT => 5]` agar gagal cepat, bukan menahan proses sampai `max_execution_time` |
 | Login 422 | Body JSON tidak terbaca → pastikan modul terbaru (mendaftarkan `JsonParser`) |
 | Log berisi `yii\debug\Module::checkAccess` + rekaman `$_POST/$_SERVER` tiap request | `YII_DEBUG` masih `true` di produksi → tambahkan `SetEnv YII_ENV prod` + `SetEnv YII_DEBUG false` di `web/.htaccess`; `gii`/`debug` otomatis mati |
 | `/web/gii` dapat diakses publik | Sama seperti di atas; tambahkan juga `RewriteRule ^(gii|debug)(/|$) - [R=404,L]` |
