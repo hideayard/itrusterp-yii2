@@ -81,6 +81,33 @@ Compress-Archive -Path .\* -DestinationPath ..\itrust-deploy.zip -Force
 
 ## 5. Konfigurasi
 
+### 5.0 `.htaccess` di ROOT PROYEK (wajib bila document root = root proyek)
+
+Kalau document root tidak bisa diarahkan ke `web/` (mis. `/home/<akun>/public_html/itrust`),
+maka `.env`, `config/db.php`, `vendor/`, `runtime/logs/`, `*.sql`, dan `vendor*.zip` **bisa
+diunduh publik**. Tutup dengan `.htaccess` di root proyek:
+
+```apache
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # 1) URL kosong -> folder web/
+    RewriteRule ^$ web/ [L]
+
+    # 2) folder web/ diteruskan (aturannya ada di web/.htaccess)
+    RewriteRule ^web(/|$) - [L]
+
+    # 3) selain itu DITOLAK (403); /.well-known/ dikecualikan untuk SSL
+    RewriteCond %{REQUEST_URI} !/\.well-known/
+    RewriteRule ^ - [F,L]
+</IfModule>
+```
+
+Pola `^web` bersifat relatif terhadap folder `.htaccess`, jadi berkas yang sama juga aman dipakai
+di Laragon (subfolder `/OLD/itrust/`). Hasil uji: `/.env`, `/config/db.php`,
+`/vendor/autoload.php`, `/runtime/logs/app.log`, `/composer.json`, `/yii` → **403**, sedangkan
+`/`, `/web/site/login`, `/web/erp/api/v1` → **200**.
+
 ### 5.1 Database iTrust — `config/db.php`
 Berkas ini **gitignored**, jadi harus dibuat/diedit langsung di server:
 
@@ -114,37 +141,52 @@ Modul membaca variabel ini lewat `getenv()` **dan** `$_SERVER` (lihat
 > edit langsung `modules/erp/config/db.php` dan isi kredensialnya. Ingat: berkas itu
 > **tertimpa** saat modul diregenerasi — catat nilainya.
 
-### 5.3 Mode produksi — `web/.htaccess` (disarankan)
+### 5.3 Mode produksi & environment — `.env` atau `web/.htaccess`
 
-`web/index.php` iTrust membaca environment (default `dev` untuk lokal). Di hosting cukup
-tambahkan dua baris ini ke `web/.htaccess`:
+iTrust kini membaca environment lewat **dua cara** (pilih salah satu):
+
+**A. Berkas `.env` di root proyek (disarankan)** — `web/index.php` memuatnya otomatis
+(berkas ini di luar document root, jadi tidak bisa diunduh):
+
+```dotenv
+# /home/<akun>/itrust/.env   (contoh lengkap: .env.example)
+YII_ENV=prod
+YII_DEBUG=false
+
+AUREUS_DB_HOST=localhost
+AUREUS_DB=<akun>_itrust_erp
+AUREUS_DB_USER=<akun>_erp
+AUREUS_DB_PASSWORD=rahasia
+AUREUS_CORS_ORIGINS=https://itrust-erp.pages.dev
+```
+
+**B. `SetEnv` di `web/.htaccess`** (kalau lebih suka tanpa berkas `.env`):
 
 ```apache
 SetEnv YII_ENV prod
 SetEnv YII_DEBUG false
+SetEnv AUREUS_DB_HOST localhost
+SetEnv AUREUS_DB <akun>_itrust_erp
+SetEnv AUREUS_DB_USER <akun>_erp
+SetEnv AUREUS_DB_PASSWORD 'rahasia'
 ```
 
-Efeknya: **debugger (`yii\debug`) dan `gii` tidak dimuat**, dan log berhenti merekam
-`$_POST`/`$_SERVER` setiap request — inilah penyebab log berisi:
+Keduanya mematikan **debugger (`yii\debug`)** dan **`gii`**, serta menghentikan log
+`$_POST`/`$_SERVER` setiap request:
 
 ```
 [yii\debug\Module::checkAccess] Access to debugger is denied due to IP address restriction...
 [info][application] $_POST = [ ... ]  $_SERVER = [ ... ]
 ```
 
-Jika `SetEnv` tidak diteruskan oleh hosting (PHP-FPM dengan `clear_env=on`), ubah manual
-`web/index.php`:
-
-```php
-defined('YII_DEBUG') or define('YII_DEBUG', false);
-defined('YII_ENV') or define('YII_ENV', 'prod');
-```
-
-Tambahan pengaman (opsional) di `web/.htaccess` — tolak akses langsung ke generator/debugger:
+Tambahan pengaman di `web/.htaccess`:
 
 ```apache
 RewriteRule ^(gii|debug)(/|$) - [R=404,L]
 ```
+
+Jika kedua cara tidak terbaca (PHP-FPM `clear_env=on`), hardcode di `web/index.php`:
+`YII_DEBUG=false`, `YII_ENV='prod'`.
 
 ---
 
@@ -244,6 +286,7 @@ lalu hapus isi `runtime/cache/` dan `modules/erp/runtime/cache/`.
 | Login 422 | Body JSON tidak terbaca → pastikan modul terbaru (mendaftarkan `JsonParser`) |
 | Log berisi `yii\debug\Module::checkAccess` + rekaman `$_POST/$_SERVER` tiap request | `YII_DEBUG` masih `true` di produksi → tambahkan `SetEnv YII_ENV prod` + `SetEnv YII_DEBUG false` di `web/.htaccess`; `gii`/`debug` otomatis mati |
 | `/web/gii` dapat diakses publik | Sama seperti di atas; tambahkan juga `RewriteRule ^(gii|debug)(/|$) - [R=404,L]` |
+| `.env` / `config/db.php` / `vendor/` dapat diunduh | Document root = root proyek tanpa proteksi → pasang `.htaccess` root (§5.0) atau pindahkan document root ke `web/` |
 
 ---
 
