@@ -111,7 +111,12 @@ Hasil uji terakhir:
 | `GET /erp/api/v1/employees/employees` | 200 — 7 karyawan |
 | iTrust `/`, `/site/login`, `/gmr` | 200 (tidak terganggu) |
 
-## 5. Catatan penting
+## 5. Deploy ke shared hosting
+
+Langkah lengkap (cPanel, dua database, SetEnv, permission, verifikasi, troubleshooting):
+**[`DEPLOY-ITRUST-HOSTING.md`](./DEPLOY-ITRUST-HOSTING.md)**.
+
+## 6. Catatan penting
 
 - **Jangan** menaruh kode ERP di `app\models`/`app\controllers` iTrust: nama seperti `User`,
   `Users`, `Settings`, `Service`, `Role` sudah dipakai. Modul memakai `erp\*`.

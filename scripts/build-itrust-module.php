@@ -176,14 +176,25 @@ file_put_contents($dest . '/config/db.php', <<<'PHP'
 
 /**
  * Koneksi database ERP (terpisah dari database aplikasi iTrust).
- * Ubah lewat environment: AUREUS_DB_HOST / AUREUS_DB / AUREUS_DB_USER / AUREUS_DB_PASSWORD.
+ *
+ * Nilai dibaca dari environment (getenv / $_SERVER), sehingga di shared hosting
+ * bisa disetel lewat `.htaccess` (SetEnv) atau file .env loader.
+ * Default: itrust_erp @ localhost.
  */
+$env = static function (string $key, ?string $default = null): ?string {
+    $value = getenv($key);
+    if ($value === false && isset($_SERVER[$key])) {
+        $value = $_SERVER[$key];
+    }
+    return ($value === false || $value === '') ? $default : (string) $value;
+};
+
 return [
     'class' => \yii\db\Connection::class,
-    'dsn' => 'mysql:host=' . (getenv('AUREUS_DB_HOST') ?: 'localhost')
-        . ';dbname=' . (getenv('AUREUS_DB') ?: 'itrust_erp'),
-    'username' => getenv('AUREUS_DB_USER') ?: 'root',
-    'password' => getenv('AUREUS_DB_PASSWORD') ?: '',
+    'dsn' => 'mysql:host=' . $env('AUREUS_DB_HOST', 'localhost')
+        . ';dbname=' . $env('AUREUS_DB', 'itrust_erp'),
+    'username' => $env('AUREUS_DB_USER', 'root'),
+    'password' => $env('AUREUS_DB_PASSWORD', ''),
     'charset' => 'utf8mb4',
     'attributes' => [
         \PDO::MYSQL_ATTR_INIT_COMMAND => "SET time_zone = '+00:00'",
