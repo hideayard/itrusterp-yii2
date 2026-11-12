@@ -28,6 +28,8 @@ class MetaController extends ApiController
             $database = 'unreachable';
         }
 
+        $apiRoot = (string) (Yii::$app->params['erpApiPrefix'] ?? '/admin/api/v1');
+
         return [
             'data' => [
                 'name' => 'iTrustERP API',
@@ -36,9 +38,9 @@ class MetaController extends ApiController
                 'version' => '1.0.0',
                 'time' => gmdate('c'),
                 'endpoints' => [
-                    'login' => '/admin/api/v1/login',
-                    'resources' => '/admin/api/v1/system/resources',
-                    'example' => '/admin/api/v1/products/products',
+                    'login' => $apiRoot . '/login',
+                    'resources' => $apiRoot . '/system/resources',
+                    'example' => $apiRoot . '/products/products',
                 ],
             ],
         ];
