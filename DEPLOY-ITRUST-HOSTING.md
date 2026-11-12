@@ -161,8 +161,24 @@ Modul membaca variabel ini lewat `getenv()` **dan** `$_SERVER` (lihat
 `modules/erp/config/db.php`), jadi tetap jalan di CGI/suPHP maupun PHP-FPM.
 
 > Jika hosting tidak meneruskan `SetEnv` (jarang, biasanya PHP-FPM dengan `clear_env=on`),
-> edit langsung `modules/erp/config/db.php` dan isi kredensialnya. Ingat: berkas itu
-> **tertimpa** saat modul diregenerasi — catat nilainya.
+> **jangan** menulis kredensial di `modules/erp/config/db.php` — berkas itu ikut ter-commit dan
+> tertimpa saat modul diregenerasi. Buat berkas terpisah yang **di-gitignore**:
+>
+> `modules/erp/config/db.local.php`
+> ```php
+> <?php
+> return [
+>     'class' => \yii\db\Connection::class,
+>     'dsn' => 'mysql:host=localhost;dbname=<akun>_itrust_erp',
+>     'username' => '<akun>_erp',
+>     'password' => 'PASSWORD_DB_ERP',
+>     'charset' => 'utf8mb4',
+>     'attributes' => [PDO::ATTR_TIMEOUT => 5],
+> ];
+> ```
+> `config/db.php` otomatis memakai berkas ini bila ada (lihat awal berkas), dan
+> `modules/erp/.gitignore` sudah memuat `config/db.local.php` sehingga kredensial tidak pernah
+> masuk ke Git.
 
 ### 5.3 Mode produksi & environment — `.env` atau `web/.htaccess`
 

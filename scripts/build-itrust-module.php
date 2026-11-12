@@ -177,10 +177,16 @@ file_put_contents($dest . '/config/db.php', <<<'PHP'
 /**
  * Koneksi database ERP (terpisah dari database aplikasi iTrust).
  *
- * Nilai dibaca dari environment (getenv / $_SERVER), sehingga di shared hosting
- * bisa disetel lewat `.htaccess` (SetEnv) atau file .env loader.
- * Default: itrust_erp @ localhost.
+ * Kredensial TIDAK ditulis di berkas ini. Urutan pembacaan:
+ *   1. config/db.local.php  (berkas lokal/server, di-gitignore) — opsional
+ *   2. environment: AUREUS_DB_HOST / AUREUS_DB / AUREUS_DB_USER / AUREUS_DB_PASSWORD
+ *   3. default: itrust_erp @ localhost
  */
+$local = __DIR__ . '/db.local.php';
+if (is_file($local)) {
+    return require $local;
+}
+
 $env = static function (string $key, ?string $default = null): ?string {
     $value = getenv($key);
     if ($value === false && isset($_SERVER[$key])) {
@@ -219,7 +225,7 @@ return [
 ];
 PHP);
 
-file_put_contents($dest . '/.gitignore', "runtime/*\n!runtime/.gitkeep\n");
+file_put_contents($dest . '/.gitignore', "runtime/*\n!runtime/.gitkeep\nconfig/db.local.php\n");
 file_put_contents($dest . '/runtime/.gitkeep', '');
 
 echo "Module.php + config dibuat\nselesai.\n";
