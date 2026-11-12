@@ -200,6 +200,37 @@ RewriteRule ^(gii|debug)(/|$) - [R=404,L]
 Jika kedua cara tidak terbaca (PHP-FPM `clear_env=on`), hardcode di `web/index.php`:
 `YII_DEBUG=false`, `YII_ENV='prod'`.
 
+### 5.5 Wajib: teruskan header `Authorization` ke PHP
+
+Hosting ini menjalankan PHP sebagai CGI/suPHP, sehingga Apache **membuang** header
+`Authorization: Bearer …`. Akibatnya login berhasil (mendapat token) tetapi semua request
+ber-token dibalas **401**.
+
+Tambahkan ke **`web/.htaccess`** (berkas yang sama dengan rewrite iTrust, di atas aturan lain):
+
+```apache
+<IfModule mod_rewrite.c>
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule ^ - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+</IfModule>
+
+<IfModule mod_setenvif.c>
+    SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+</IfModule>
+```
+
+`erp\components\BearerAuth` (`modules/erp/components/BearerAuth.php`) sudah diperkuat: bila header
+tidak terlihat lewat `getallheaders()`, nilainya diambil dari
+`$_SERVER['REDIRECT_HTTP_AUTHORIZATION']` / `$_SERVER['HTTP_AUTHORIZATION']`.
+
+Verifikasi (harus 200, bukan 401):
+
+```powershell
+$t = (curl.exe -s -X POST https://domainmu.com/web/erp/api/v1/login -H "Content-Type: application/json" `
+     -d '{\"login\":\"admin\",\"password\":\"PASS\"}' | ConvertFrom-Json).token
+curl.exe -i -H "Authorization: Bearer $t" https://domainmu.com/web/erp/api/v1/products/products?per_page=1
+```
+
 ### 5.4 Muat route ERP hanya saat diperlukan (penting untuk endpoint yang dipanggil terus-menerus)
 
 Modul ERP mendaftarkan **ratusan UrlRule**. Jika `config/web.php` selalu me-merge seluruh route ERP,
