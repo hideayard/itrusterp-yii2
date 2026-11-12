@@ -258,6 +258,17 @@ $t = (curl.exe -s -X POST https://domainmu.com/web/erp/api/v1/login -H "Content-
 curl.exe -i -H "Authorization: Bearer $t" https://domainmu.com/web/erp/api/v1/products/products?per_page=1
 ```
 
+**Fallback tanpa mengubah `.htaccess`:** frontend Astro mengirim token di **dua** header —
+`Authorization: Bearer …` **dan** `X-Auth-Token: …`. `erp\components\BearerAuth` versi terbaru juga
+menerima `X-Auth-Token` (dan query `access_token`). Dengan demikian, cukup **unggah
+`modules/erp/components/BearerAuth.php`** terbaru ke server dan login akan bekerja walau hosting
+tetap membuang header `Authorization`.
+
+```powershell
+# uji setelah BearerAuth baru ter-upload
+curl.exe -i -H "X-Auth-Token: $t" https://domainmu.com/web/erp/api/v1/products/products?per_page=1
+```
+
 ### 5.4 Muat route ERP hanya saat diperlukan (penting untuk endpoint yang dipanggil terus-menerus)
 
 Modul ERP mendaftarkan **ratusan UrlRule**. Jika `config/web.php` selalu me-merge seluruh route ERP,
