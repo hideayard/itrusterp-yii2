@@ -91,17 +91,29 @@ diunduh publik**. Tutup dengan `.htaccess` di root proyek:
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
-    # 1) URL kosong -> folder web/
+    # 1) Beranda proyek -> folder web/
     RewriteRule ^$ web/ [L]
 
-    # 2) folder web/ diteruskan (aturannya ada di web/.htaccess)
-    RewriteRule ^web(/|$) - [L]
-
-    # 3) selain itu DITOLAK (403); /.well-known/ dikecualikan untuk SSL
+    # 2) Berkas berawalan titik (.env, .git, …); /.well-known/ untuk SSL
     RewriteCond %{REQUEST_URI} !/\.well-known/
-    RewriteRule ^ - [F,L]
+    RewriteRule (^|/)\. - [F,L]
+
+    # 3) Ekstensi sensitif
+    RewriteRule \.(env|sql|log|zip|md|lock|yml|yaml|neon|sh|ps1|bat|dist)$ - [F,L]
+
+    # 4) Folder sumber & utilitas
+    RewriteRule ^(config|vendor|runtime|tests|scripts|mt5|example|mail|uploads|views|models|controllers|helpers|widgets|commands|assets)(/|$) - [F,L]
+
+    # 5) Berkas utilitas di root
+    RewriteRule ^(yii|yii\.bat|requirements\.php|codeception\.yml|composer\.(json|lock)|Vagrantfile|docker-compose\.yml|invoice\.code-workspace)$ - [F,L]
 </IfModule>
 ```
+
+> **Jangan** memakai pola “tolak semua kecuali `web/`” (`RewriteRule ^ - [F,L]`). Pola itu memang
+> menutup berkas sensitif, tetapi juga memblokir **halaman error bawaan hosting** (mis. `/500.shtml`),
+> sehingga muncul pesan ganda: `Internal Server Error … Additionally, a 403 Forbidden error was
+> encountered while trying to use an ErrorDocument`. Versi di atas memblokir secara **targeted**
+> (hanya yang sensitif) sehingga halaman error tetap tampil.
 
 Pola `^web` bersifat relatif terhadap folder `.htaccess`, jadi berkas yang sama juga aman dipakai
 di Laragon (subfolder `/OLD/itrust/`). Hasil uji: `/.env`, `/config/db.php`,
@@ -326,6 +338,7 @@ lalu hapus isi `runtime/cache/` dan `modules/erp/runtime/cache/`.
 | Log berisi `yii\debug\Module::checkAccess` + rekaman `$_POST/$_SERVER` tiap request | `YII_DEBUG` masih `true` di produksi → tambahkan `SetEnv YII_ENV prod` + `SetEnv YII_DEBUG false` di `web/.htaccess`; `gii`/`debug` otomatis mati |
 | `/web/gii` dapat diakses publik | Sama seperti di atas; tambahkan juga `RewriteRule ^(gii|debug)(/|$) - [R=404,L]` |
 | `.env` / `config/db.php` / `vendor/` dapat diunduh | Document root = root proyek tanpa proteksi → pasang `.htaccess` root (§5.0) atau pindahkan document root ke `web/` |
+| Muncul `Internal Server Error … Additionally, a 403 Forbidden … ErrorDocument` | Bukan error kedua: 500 asli berasal dari PHP/limit proses, sedangkan 403 karena halaman error hosting (`/500.shtml`) ikut diblokir aturan “tolak semua”. Pakai `.htaccess` root versi *targeted* (§5.0), lalu benahi 500-nya (§5.4 + Resource Usage) |
 
 ---
 
