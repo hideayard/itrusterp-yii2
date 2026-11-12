@@ -39,6 +39,23 @@ class BearerAuth extends HttpBearerAuth
             }
         }
 
+        // Jalur cadangan: sebagian hosting (CGI/suPHP) membuang header
+        // `Authorization`, jadi token boleh dikirim lewat `X-Auth-Token`
+        // atau query `access_token` (dipakai frontend Astro).
+        if ($headers->get('Authorization') === null) {
+            $custom = $headers->get('X-Auth-Token');
+            if ($custom === null && !empty($_SERVER['HTTP_X_AUTH_TOKEN'])) {
+                $custom = $_SERVER['HTTP_X_AUTH_TOKEN'];
+            }
+            if ($custom === null && Yii::$app->request->get('access_token') !== null) {
+                $custom = (string) Yii::$app->request->get('access_token');
+            }
+            if ($custom !== null && $custom !== '') {
+                $value = preg_replace('/^Bearer\s+/i', '', (string) $custom);
+                $headers->set('Authorization', 'Bearer ' . $value);
+            }
+        }
+
         return parent::beforeAction($action);
     }
 
