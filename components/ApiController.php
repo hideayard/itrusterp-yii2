@@ -84,9 +84,18 @@ abstract class ApiController extends Controller
     protected function applyCorsHeaders(Response $response): void
     {
         $origin = Yii::$app->request->getHeaders()->get('Origin');
-        if ($origin !== false && in_array($origin, Yii::$app->params['corsOrigins'], true)) {
-            $response->getHeaders()->set('Access-Control-Allow-Origin', $origin);
+        $allowed = (array) (Yii::$app->params['corsOrigins'] ?? []);
+
+        if ($origin !== false && $origin !== null) {
+            $allowAll = in_array('*', $allowed, true);
+            if ($allowAll || in_array($origin, $allowed, true)) {
+                // Refleksikan origin (bukan '*') agar tetap kompatibel bila kelak
+                // memakai cookie/credentials.
+                $response->getHeaders()->set('Access-Control-Allow-Origin', (string) $origin);
+                $response->getHeaders()->set('Vary', 'Origin');
+            }
         }
+
         $response->getHeaders()->set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
         $response->getHeaders()->set('Access-Control-Allow-Headers', '*');
         $response->getHeaders()->set('Access-Control-Max-Age', '86400');

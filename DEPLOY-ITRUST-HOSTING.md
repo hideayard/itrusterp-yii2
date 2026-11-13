@@ -153,12 +153,23 @@ SetEnv AUREUS_DB_HOST localhost
 SetEnv AUREUS_DB <akun>_itrust_erp
 SetEnv AUREUS_DB_USER <akun>_erp
 SetEnv AUREUS_DB_PASSWORD 'PASSWORD_DB_ERP'
-SetEnv AUREUS_CORS_ORIGINS https://itrust-erp.pages.dev
+SetEnv AUREUS_CORS_ORIGINS "https://itrust-erp.pages.dev,https://erp.rimondaglobaldigital.com,http://localhost:4321"
 SetEnv AUREUS_TOKEN_TTL_DAYS 90
 ```
 
 Modul membaca variabel ini lewat `getenv()` **dan** `$_SERVER` (lihat
 `modules/erp/config/db.php`), jadi tetap jalan di CGI/suPHP maupun PHP-FPM.
+
+`AUREUS_CORS_ORIGINS` menerima **beberapa URL sekaligus** — pemisah boleh koma, titik-koma,
+spasi, atau baris baru; nilai dinormalisasi (spasi dibuang, garis miring di akhir dihapus,
+duplikat dihapus). Nilai `*` mengizinkan semua origin.
+
+```apache
+SetEnv AUREUS_CORS_ORIGINS "https://itrust-erp.pages.dev,https://erp.rimondaglobaldigital.com,http://localhost:4321"
+```
+
+Hasil uji preflight: origin yang terdaftar mendapat `Access-Control-Allow-Origin` (nilai origin
+tersebut), origin lain tidak mendapat header CORS.
 
 > Jika hosting tidak meneruskan `SetEnv` (jarang, biasanya PHP-FPM dengan `clear_env=on`),
 > **jangan** menulis kredensial di `modules/erp/config/db.php` — berkas itu ikut ter-commit dan
