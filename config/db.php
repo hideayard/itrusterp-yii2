@@ -2,7 +2,9 @@
 
 return [
     'class' => \yii\db\Connection::class,
-    'dsn' => 'mysql:host=' . (getenv('AUREUS_DB_HOST') ?: 'localhost') . ';dbname=' . (getenv('AUREUS_DB') ?: 'aureuserp'),
+    'dsn' => 'mysql:host=' . (getenv('AUREUS_DB_HOST') ?: 'localhost')
+        . ';port=' . (getenv('AUREUS_DB_PORT') ?: '3306')
+        . ';dbname=' . (getenv('AUREUS_DB') ?: 'aureuserp'),
     'username' => getenv('AUREUS_DB_USER') ?: 'root',
     'password' => getenv('AUREUS_DB_PASSWORD') ?: '',
     'charset' => 'utf8mb4',

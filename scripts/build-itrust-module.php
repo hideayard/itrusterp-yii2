@@ -202,6 +202,7 @@ $env = static function (string $key, ?string $default = null): ?string {
 return [
     'class' => \yii\db\Connection::class,
     'dsn' => 'mysql:host=' . $env('AUREUS_DB_HOST', 'localhost')
+        . ';port=' . $env('AUREUS_DB_PORT', '3306')
         . ';dbname=' . $env('AUREUS_DB', 'itrust_erp'),
     'username' => $env('AUREUS_DB_USER', 'root'),
     'password' => $env('AUREUS_DB_PASSWORD', ''),

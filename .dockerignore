@@ -1,0 +1,16 @@
+.git
+.gitignore
+.gitattributes
+vendor
+runtime/*
+web/assets/*
+node_modules
+dist
+.env
+.env.local
+.env.*.local
+tests
+*.log
+tmp-*
+*.zip
+DOCKER.md
