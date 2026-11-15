@@ -51,7 +51,7 @@ docker ps --format '{{.Names}}\t{{.Status}}\t{{.Ports}}'
 
 ## 2. User MySQL untuk aplikasi
 
-**Mode all-in-one:** tidak perlu langkah ini — user `itrust` dan database `itrust_db` dibuat
+**Mode all-in-one:** tidak perlu langkah ini — user `itrust` dan database `erp` dibuat
 otomatis oleh image MySQL dari variabel `MYSQL_*`. Lewati ke §4.
 
 **Mode API-saja:** `root` di container MySQL yang sudah ada biasanya hanya boleh dari `localhost`
