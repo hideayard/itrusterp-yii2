@@ -87,17 +87,39 @@ docker run -d --name mysql-root-reset \
   --user=mysql --init-file=/reset.sql --skip-networking >/dev/null
 
 echo "[4/5] menunggu server selesai..."
+READY=0
 for _ in $(seq 1 30); do
   if docker logs mysql-root-reset 2>&1 | grep -q "ready for connections"; then
+    READY=1
     break
   fi
   sleep 1
 done
+
+ERRORS="$(docker logs mysql-root-reset 2>&1 | grep -i '\[ERROR\]' || true)"
 docker stop mysql-root-reset >/dev/null 2>&1 || true
 docker rm mysql-root-reset >/dev/null 2>&1 || true
 
+if [ "$READY" -ne 1 ]; then
+  echo "error: server sementara tidak siap; container asli TIDAK dinyalakan." >&2
+  echo "log bagus ada di $BACKUP_DIR (datadir sudah dibackup)." >&2
+  echo "coba: docker run --rm -it -v $MOUNT $IMAGE --user=mysql --init-file=/reset.sql --skip-networking" >&2
+  exit 1
+fi
+if [ -n "$ERRORS" ]; then
+  echo "peringatan: ada error di log server sementara:"
+  echo "$ERRORS" | sed 's/^/  /'
+fi
+
 echo "[5/5] menyalakan kembali container asli..."
 docker start "$CONTAINER" >/dev/null
+
+echo "     menguji login root dengan password baru..."
+if docker exec -e MYSQL_PWD="$NEWPASS" "$CONTAINER" mysql -uroot -e 'SELECT "login-ok" AS status;' >/dev/null 2>&1; then
+  echo "     OK: login root berhasil dengan password baru."
+else
+  echo "     PERINGATAN: login root gagal. Periksa: docker logs $CONTAINER" >&2
+fi
 
 cat <<EOF
 
