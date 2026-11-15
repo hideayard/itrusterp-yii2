@@ -160,7 +160,98 @@ Alternatif saat pengembangan: tambahkan bind mount di `docker-compose.yml`:
 
 ---
 
-## 8. Varian: iTrust + modul ERP
+## 8. Lupa password MySQL di container
+
+### A. Cari dulu dari konfigurasi container (sering masih tersimpan)
+
+```bash
+docker inspect mysql-itrust --format '{{json .Config.Env}}' | tr ',' '\n' | grep -i MYSQL
+# contoh: MYSQL_ROOT_PASSWORD=rahasia
+docker exec mysql-itrust env | grep -i MYSQL
+```
+
+Kalau ada `MYSQL_ROOT_PASSWORD`, itu password root yang diset **saat container dibuat** (selama tidak
+pernah diubah). Cek juga file compose/`docker run` yang dipakai untuk membuatnya.
+
+### B. Reset lewat `--init-file` (disarankan, tanpa mode tanpa-password)
+
+1. Catat **volume** datadir dan **image** aslinya:
+
+   ```bash
+   docker inspect mysql-itrust --format '{{range .Mounts}}{{.Type}} {{.Name}} {{.Source}} -> {{.Destination}}{{println}}{{end}}'
+   docker inspect mysql-itrust --format '{{.Config.Image}}'
+   ```
+
+2. Backup data (disarankan):
+
+   ```bash
+   docker stop mysql-itrust
+   docker cp mysql-itrust:/var/lib/mysql ./mysql-data-backup-$(date +%F)
+   ```
+
+3. Buat berkas SQL reset:
+
+   ```bash
+   cat > /tmp/reset.sql <<'SQL'
+   ALTER USER 'root'@'localhost' IDENTIFIED BY 'PasswordBaru#123';
+   ALTER USER 'root'@'%' IDENTIFIED BY 'PasswordBaru#123';
+   SQL
+   ```
+
+4. Jalankan container sementara memakai **volume yang sama** + init-file:
+
+   ```bash
+   docker run --rm -it \
+     -v <VOLUME_NAME>:/var/lib/mysql \
+     -v /tmp/reset.sql:/reset.sql:ro \
+     mysql:8 --init-file=/reset.sql --skip-networking
+   # tunggu "ready for connections", lalu Ctrl+C
+   ```
+
+   Gunakan versi **mayor yang sama** dengan image asli (mis. `mysql:8` vs `mysql:8.4`).
+
+5. Nyalakan container asli & uji:
+
+   ```bash
+   docker start mysql-itrust
+   mysql -h127.0.0.1 -P3307 -uroot -p -e "SELECT VERSION();"
+   ```
+
+### C. Alternatif: `--skip-grant-tables`
+
+```bash
+docker stop mysql-itrust
+docker run --rm -it --name mysql-recover \
+  -v <VOLUME_NAME>:/var/lib/mysql \
+  mysql:8 --skip-grant-tables --skip-networking
+```
+
+Di terminal lain:
+
+```bash
+docker exec -it mysql-recover mysql -uroot
+FLUSH PRIVILEGES;
+ALTER USER 'root'@'localhost' IDENTIFIED BY 'PasswordBaru#123';
+```
+
+Selalu pakai `--skip-networking`; tanpa itu siapa pun bisa login tanpa password. Setelah selesai
+hentikan container recovery, lalu `docker start mysql-itrust`.
+
+### D. Kalau data boleh hilang (paling cepat)
+
+```bash
+docker compose down -v      # hapus volume MySQL
+docker compose up -d        # init ulang dengan MYSQL_ROOT_PASSWORD baru
+```
+
+### E. Setelah berhasil masuk
+
+1. Perbarui `AUREUS_DB_PASSWORD` di `.env`/`docker-compose.yml` API, lalu `docker compose up -d`.
+2. Buat user aplikasi khusus (§2) dan hentikan pemakaian `root` untuk aplikasi.
+3. Simpan password di password manager.
+
+
+## 9. Varian: iTrust + modul ERP
 
 Kalau yang dijalankan adalah **iTrust + modul ERP** (`OLD/itrust`, dokumen root `web/`), polanya sama:
 
