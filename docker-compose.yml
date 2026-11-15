@@ -1,32 +1,77 @@
-# API iTrustERP (Yii2) di Docker.
-# MySQL TIDAK dijalankan di sini — memakai container MySQL yang sudah ada
-# (contoh: mysql-itrust, port host 3307 -> 3306).
+# ============================================================================
+#  iTrustERP — API Yii2 + MySQL 8.0 (all-in-one)
+#
+#  Jalankan:  docker compose up -d --build
+#  API      :  http://localhost:8888/admin/api/v1
+#  MySQL    :  127.0.0.1:3307  (user: itrust / itrust_password, db: erp)
+#
+#  Kredensial bisa dioverride lewat berkas .env di folder ini (compose membaca
+#  .env otomatis untuk substitusi ${...}).
+# ============================================================================
+
+name: itrust-erp
 
 services:
+  db:
+    image: mysql:8.0
+    container_name: itrust-db
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      # Aktifkan hanya bila ada klien PHP lama yang belum mendukung caching_sha2:
+      # - --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_password}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-erp}
+      MYSQL_USER: ${MYSQL_USER:-itrust}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-itrust_password}
+      # Informasi versi mayor (tidak mengubah perilaku image, hanya penanda)
+      MYSQL_MAJOR: "8.0"
+      TZ: Asia/Jakarta
+    ports:
+      # host:container — hanya listen di loopback host
+      - "127.0.0.1:3307:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      # Semua *.sql / *.sh di folder ini diimpor OTOMATIS saat volume masih kosong
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_ROOT_PASSWORD mysqladmin ping -h127.0.0.1 -uroot --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   api:
     build: .
     image: itrusterp-yii2:latest
     container_name: itrust-api
     restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
     ports:
-      # host:container  → API di http://localhost:8899
-      - "8899:80"
+      - "8888:80"
     environment:
-      YII_ENV: prod
+      YII_ENV: ${YII_ENV:-prod}
       YII_DEBUG: "false"
 
-      # host.docker.internal = mesin host (Mint). 3307 = port publish container MySQL.
-      AUREUS_DB_HOST: host.docker.internal
-      AUREUS_DB_PORT: "3307"
-      AUREUS_DB: aureuserp
-      AUREUS_DB_USER: itrust
-      AUREUS_DB_PASSWORD: ganti-password
+      # Nama service `db` otomatis jadi hostname di network compose
+      AUREUS_DB_HOST: db
+      AUREUS_DB_PORT: "3306"
+      AUREUS_DB: ${MYSQL_DATABASE:-erp}
+      AUREUS_DB_USER: ${MYSQL_USER:-itrust}
+      AUREUS_DB_PASSWORD: ${MYSQL_PASSWORD:-itrust_password}
 
-      AUREUS_CORS_ORIGINS: "https://itrust-erp.pages.dev,http://localhost:4321"
+      AUREUS_CORS_ORIGINS: ${AUREUS_CORS_ORIGINS:-https://itrust-erp.pages.dev,https://erp.rimondaglobaldigital.com,http://localhost:4321}
       AUREUS_TOKEN_TTL_DAYS: "90"
-    extra_hosts:
-      # Wajib di Linux agar host.docker.internal bisa di-resolve
-      - "host.docker.internal:host-gateway"
+      TZ: Asia/Jakarta
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1/admin/api/v1 >/dev/null || exit 1"]
       interval: 30s
@@ -39,13 +84,5 @@ services:
         max-size: "10m"
         max-file: "3"
 
-# Alternatif: memakai container MySQL langsung lewat nama container (tanpa host gateway).
-#   docker inspect mysql-itrust --format '{{json .NetworkSettings.Networks}}'
-# lalu tambahkan:
-#
-# networks:
-#   default:
-#     external: true
-#     name: <nama-network-mysql>
-#
-# dan set AUREUS_DB_HOST: mysql-itrust , AUREUS_DB_PORT: "3306".
+volumes:
+  db_data:
