@@ -1,79 +1,70 @@
 # Menjalankan BE iTrustERP (Yii2) dengan Docker — Linux Mint 22
 
-Panduan menjalankan **API Yii2** + **MySQL 8.0** dengan Docker di Linux Mint 22.
-
-Dua mode:
-
-| Mode | Berkas | Dipakai bila |
-|---|---|---|
-| **All-in-one** (default) | `docker-compose.yml` | Belum ada MySQL, atau ingin DB + API dalam satu compose |
-| **API saja** | `docker-compose.api-only.yml` | MySQL sudah jalan sebagai container lain (mis. `mysql-itrust` di host :3307) |
+Panduan menjalankan **API Yii2** di container, memakai **container MySQL yang sudah ada**
+(`mysql-itrust`, publish `0.0.0.0:3307->3306`). **Tidak ada container MySQL baru** yang dibuat.
 
 ```
-All-in-one (Mint 22)
-├── container itrust-db    → MySQL 8.0, publish 127.0.0.1:3307 -> 3306
-└── container itrust-api   → Apache + PHP 8.2, publish :8888 -> 80
-        └── konek ke service `db` (hostname di network compose)
+Laptop (Mint 22)
+├── container mysql-itrust   → MySQL di host :3307   (SUDAH ADA, tidak diubah)
+└── container itrust-api     → Apache + PHP 8.2, publish :8888
+        └── host.docker.internal:3307 → MySQL container
 ```
 
-Kredensial default (override lewat `.env`):
+Kredensial & port:
 
 | Variabel | Nilai |
 |---|---|
-| `MYSQL_ROOT_PASSWORD` | `root_password` |
 | `MYSQL_DATABASE` | `erp` |
 | `MYSQL_USER` / `MYSQL_PASSWORD` | `itrust` / `itrust_password` |
-| Port MySQL di host | `127.0.0.1:3307` |
-| Port API di host | `8888` |
+| `MYSQL_ROOT_PASSWORD` | `root_password` |
+| MySQL dari host | `127.0.0.1:3307` |
+| API | `http://localhost:8888/admin/api/v1` |
 
 ---
 
 ## 1. Prasyarat (Mint 22)
 
 ```bash
-# Docker Engine + compose plugin
-sudo apt update
 sudo apt install -y docker.io docker-compose-v2
 sudo usermod -aG docker "$USER"   # logout/login agar berlaku
 docker --version && docker compose version
 
-# Pastikan MySQL container hidup
+# pastikan MySQL container hidup dan lihat port publikasinya
 docker ps --format '{{.Names}}\t{{.Status}}\t{{.Ports}}'
 # contoh: mysql-itrust  Up 2 months (healthy)  0.0.0.0:3307->3306/tcp
 ```
 
-> Kalau `mysql-itrust` berjalan di **network** tertentu, catat namanya:
-> ```bash
-> docker inspect mysql-itrust --format '{{json .NetworkSettings.Networks}}'
-> ```
+Kalau port publikasinya bukan 3307, catat dan sesuaikan `AUREUS_DB_PORT`.
 
 ---
 
-## 2. User MySQL untuk aplikasi
+## 2. Siapkan database `erp` + user `itrust` di container yang ada
 
-**Mode all-in-one:** tidak perlu langkah ini — user `itrust` dan database `erp` dibuat
-otomatis oleh image MySQL dari variabel `MYSQL_*`. Lewati ke §4.
-
-**Mode API-saja:** `root` di container MySQL yang sudah ada biasanya hanya boleh dari `localhost`
-**di dalam container**, sedangkan API container datang lewat TCP. Buat user khusus (sekali saja):
+Dilakukan **sekali** saja, langsung di dalam container MySQL (tidak perlu password root bila
+kamu bisa `docker exec` — klausa `-p` di bawah hanya perlu bila root punya password):
 
 ```bash
-docker exec -it mysql-itrust mysql -uroot -p -e "
-CREATE USER IF NOT EXISTS 'itrust'@'%' IDENTIFIED BY 'ganti-password';
-GRANT ALL PRIVILEGES ON aureuserp.* TO 'itrust'@'%';
-FLUSH PRIVILEGES;"
+docker exec -it mysql-itrust mysql -uroot -proot_password -e "
+CREATE DATABASE IF NOT EXISTS erp CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS 'itrust'@'%' IDENTIFIED BY 'itrust_password';
+GRANT ALL PRIVILEGES ON erp.* TO 'itrust'@'%';
+FLUSH PRIVILEGES;
+SHOW DATABASES LIKE 'erp';"
 ```
 
 Uji dari host:
 
 ```bash
-mysql -h127.0.0.1 -P3307 -uitrust -p -e "SELECT COUNT(*) FROM aureuserp.products_products;"
+mysql -h127.0.0.1 -P3307 -uitrust -pitrust_password erp -e "SELECT 'ok' AS status;"
 ```
 
-> Belum ada database? Impor dump dulu:
-> ```bash
-> mysql -h127.0.0.1 -P3307 -uitrust -p aureuserp < aureuserp.sql
-> ```
+Impor dump (bila tabel belum ada):
+
+```bash
+mysql -h127.0.0.1 -P3307 -uitrust -pitrust_password erp < erp.sql
+```
+
+> Butuh `root`? Bila password root lupa, lihat §8.
 
 ---
 
@@ -82,52 +73,29 @@ mysql -h127.0.0.1 -P3307 -uitrust -p -e "SELECT COUNT(*) FROM aureuserp.products
 | Berkas | Fungsi |
 |---|---|
 | `Dockerfile` | PHP 8.2 + Apache, docroot **`/var/www/html/web`**, ekstensi `pdo_mysql intl zip mbstring gd opcache`, `AllowOverride All` |
-| `docker-compose.yml` | **All-in-one**: service `db` (MySQL 8.0, `127.0.0.1:3307`) + service `api` (publish **8888:80**) |
-| `docker-compose.api-only.yml` | Hanya service `api`, menembak MySQL yang sudah ada (`host.docker.internal:3307`) |
-| `docker/mysql/init/` | Drop `*.sql` di sini → diimpor otomatis saat volume MySQL pertama kali dibuat |
+| `docker-compose.yml` | **Default**: hanya service `api` (publish **8888:80**), DB = container MySQL yang sudah ada |
+| `docker-compose.with-db.yml` | Opsional: menambah service `db` (MySQL 8.0) bila mau DB dari Docker |
+| `.env.example` | Kredensial DB + CORS + TTL token |
 | `.dockerignore` | mengecualikan `vendor/`, `runtime/`, `.git`, `.env`, dll. |
 
-Catatan: `config/db.php` mendukung **`AUREUS_DB_PORT`** (default 3306) dan `.env` (host, port, nama
-DB, user, password).
+Catatan: `config/db.php` membaca `AUREUS_DB_HOST`, **`AUREUS_DB_PORT`** (default 3306), `AUREUS_DB`,
+`AUREUS_DB_USER`, `AUREUS_DB_PASSWORD` dari `.env`.
 
 ---
 
-## 4. Jalankan (mode all-in-one)
+## 4. Jalankan API
 
 ```bash
 cd ~/ERP/aureuserp-yii2        # sesuaikan lokasi project
 
-# (opsional) salin & sesuaikan kredensial
-cp .env.example .env
-
+cp .env.example .env           # opsional, default sudah sesuai container yang ada
 docker compose config          # validasi
-docker compose up -d --build   # DB + API
+docker compose up -d --build   # build image + jalankan API
 docker compose ps
-docker compose logs -f api
+docker compose logs -f api     # pantau
 ```
 
-> **Port 3307 bentrok?** Kalau container `mysql-itrust` masih jalan di `0.0.0.0:3307`, `up` akan
-> gagal `address already in use`. Pilih salah satu:
-> ```bash
-> docker stop mysql-itrust                     # kalau tidak dipakai lagi
-> # atau ganti port host di docker-compose.yml → "127.0.0.1:3308:3306"
-> # atau pakai mode API-saja (lihat akhir bagian ini)
-> ```
-
-### Impor data
-
-Dua cara:
-
-```bash
-# a) taruh dump di docker/mysql/init/ lalu init ulang volume (impor otomatis)
-cp erp.sql docker/mysql/init/01-erp.sql
-docker compose down -v && docker compose up -d
-
-# b) impor manual ke container yang sudah jalan
-docker compose exec -T db mysql -uitrust -pitrust_password erp < erp.sql
-```
-
-### Uji
+Uji:
 
 ```bash
 curl -s http://localhost:8888/admin/api/v1
@@ -138,25 +106,11 @@ curl -s -X POST http://localhost:8888/admin/api/v1/login \
   -d '{"login":"admin","password":"admin123"}'
 ```
 
-Akses MySQL dari host (mis. DBeaver/phpMyAdmin):
-
-```bash
-mysql -h127.0.0.1 -P3307 -uitrust -p erp -e "SELECT COUNT(*) FROM products_products;"
-# root: mysql -h127.0.0.1 -P3307 -uroot -proot_password
-```
-
-Kalau `database` = `unreachable` → kredensial/port DB salah (lihat §7).
-
-### Mode API-saja (MySQL sudah ada)
-
-```bash
-docker compose -f docker-compose.api-only.yml up -d --build
-# env: AUREUS_DB_HOST=host.docker.internal, AUREUS_DB_PORT=3307
-```
+Kalau `database` bukan `connected` → lihat §7.
 
 ---
 
-## 5. Menunjuk frontend Astro ke container
+## 5. Menunjuk frontend Astro ke API container
 
 `aureuserp-astro/.env.development`:
 
@@ -165,35 +119,31 @@ AUREUS_API_URL=http://localhost:8888/admin/api/v1
 ```
 
 Lalu `npm run dev` (Astro memanggil API dari sisi server — tidak perlu CORS).
-
-Untuk uji cepat dari host lain di jaringan LAN, ganti `localhost` dengan IP laptop
-(port 8888 sudah dipublish ke `0.0.0.0`).
+Untuk akses dari perangkat lain di LAN, ganti `localhost` dengan IP laptop.
 
 ---
 
 ## 6. Perintah harian
 
 ```bash
-docker compose logs -f api                 # log Apache/PHP
-docker compose logs -f db                  # log MySQL
-docker compose exec db mysql -uitrust -pitrust_password erp   # shell SQL
-docker compose exec api php yii help       # CLI Yii (migrasi/seed/script)
+docker compose logs -f api                    # log Apache/PHP
+docker compose exec api php yii help          # CLI Yii (migrasi/seed/script)
 docker compose exec api php scripts/seed-roles.php
-docker compose exec api sh                 # masuk ke container
+docker compose exec api sh                    # masuk ke container
 
-# backup / restore database
-docker compose exec -T db mysqldump -uitrust -pitrust_password erp > backup-$(date +%F).sql
+# database (tetap di container MySQL yang sudah ada)
+docker exec -it mysql-itrust mysql -uitrust -pitrust_password erp
+docker exec -t mysql-itrust mysqldump -uitrust -pitrust_password erp > backup-$(date +%F).sql
 
 # setelah mengubah kode / composer.json
 docker compose up -d --build
 
-# hentikan / hapus
-docker compose down            # container & network (data tetap di volume)
-docker compose down -v         # + hapus volume DB (SEMUA DATA HILANG)
+# hentikan API (MySQL tidak tersentuh)
+docker compose down
 ```
 
 Perubahan kode **tidak** otomatis masuk (image di-COPY saat build), jadi rebuild seperti di atas.
-Alternatif saat pengembangan: tambahkan bind mount di `docker-compose.yml`:
+Alternatif saat pengembangan — bind mount di `docker-compose.yml`:
 
 ```yaml
     volumes:
@@ -209,14 +159,15 @@ Alternatif saat pengembangan: tambahkan bind mount di `docker-compose.yml`:
 | Gejala | Penyebab & solusi |
 |---|---|
 | `500` di semua request | `runtime/` / `web/assets/` tidak writable → `docker compose exec api chown -R www-data:www-data runtime web/assets` |
-| `SQLSTATE[HY000] [2002] Connection refused` | Host/port DB salah. Mode all-in-one: host `db`, port `3306`. Mode API-saja: `host.docker.internal` + `AUREUS_DB_PORT=3307` + `extra_hosts: gateway`. Catatan: `localhost` di dalam container = container itu sendiri |
-| `SQLSTATE[HY000] [1045] Access denied` | User MySQL belum dibuat untuk host `'%'`, atau password beda (§2) |
-| `SQLSTATE[HY000] [1049] Unknown database` | Nama DB salah / dump belum diimpor |
-| `404` di semua endpoint | Document root bukan `web/`. Cek `curl -I http://localhost:8888/index.php` dan pastikan `APACHE_DOCUMENT_ROOT=/var/www/html/web` |
-| `.htaccess` error / 500 | `AllowOverride All` belum aktif (sudah di-set di Dockerfile; kalau mengubah image, pastikan tetap ada) |
-| `Class not found` setelah update kode | `composer dump-autoload --optimize` dijalankan saat build — rebuild image |
-| Healthcheck `unhealthy` | Cek `docker compose logs api`; pastikan `curl` ada di image (sudah dipasang) |
-| `host.docker.internal` tidak resolve | Tambahkan `extra_hosts: ["host.docker.internal:host-gateway"]` (wajib di Linux) |
+| `[2002] Connection refused` | Host/port DB salah. Dari container, `localhost` = container itu sendiri. Pakai `host.docker.internal` + `AUREUS_DB_PORT=3307` (port publikasi container MySQL) dan pastikan `extra_hosts: host-gateway` ada |
+| `[1045] Access denied` | User `itrust@'%'` belum dibuat / password beda (§2) |
+| `[1049] Unknown database 'erp'` | Database belum dibuat atau dump belum diimpor (§2) |
+| `host.docker.internal` tidak resolve | `extra_hosts: ["host.docker.internal:host-gateway"]` belum ada |
+| `404` di semua endpoint | Document root bukan `web/`. Cek `curl -I http://localhost:8888/index.php` |
+| `.htaccess` error / 500 | `AllowOverride All` belum aktif (sudah di-set di Dockerfile) |
+| `Class not found` setelah update kode | rebuild image (autoload di-generate saat build) |
+| Healthcheck `unhealthy` | `docker compose logs api` |
+| Port 8888/3307 dipakai proses lain | ganti port host di compose, mis. `"8889:80"` |
 
 ---
 
@@ -234,14 +185,13 @@ Alternatif saat pengembangan: tambahkan bind mount di `docker-compose.yml`:
 
 ```bash
 docker inspect mysql-itrust --format '{{json .Config.Env}}' | tr ',' '\n' | grep -i MYSQL
-# contoh: MYSQL_ROOT_PASSWORD=rahasia
 docker exec mysql-itrust env | grep -i MYSQL
 ```
 
-Kalau ada `MYSQL_ROOT_PASSWORD`, itu password root yang diset **saat container dibuat** (selama tidak
-pernah diubah). Cek juga file compose/`docker run` yang dipakai untuk membuatnya.
+Kalau ada `MYSQL_ROOT_PASSWORD`, itu password yang diset **saat container dibuat** (selama belum
+pernah diubah). Cek juga compose/`docker run` yang dipakai membuatnya.
 
-### B. Reset lewat `--init-file` (disarankan, tanpa mode tanpa-password)
+### B. Reset lewat `--init-file` (disarankan)
 
 1. Catat **volume** datadir dan **image** aslinya:
 
@@ -261,28 +211,28 @@ pernah diubah). Cek juga file compose/`docker run` yang dipakai untuk membuatnya
 
    ```bash
    cat > /tmp/reset.sql <<'SQL'
-   ALTER USER 'root'@'localhost' IDENTIFIED BY 'PasswordBaru#123';
-   ALTER USER 'root'@'%' IDENTIFIED BY 'PasswordBaru#123';
+   ALTER USER IF EXISTS 'root'@'localhost' IDENTIFIED BY 'PasswordBaru#123';
+   ALTER USER IF EXISTS 'root'@'%' IDENTIFIED BY 'PasswordBaru#123';
+   FLUSH PRIVILEGES;
    SQL
    ```
 
-4. Jalankan container sementara memakai **volume yang sama** + init-file:
+4. Jalankan container sementara memakai **volume yang sama** + init-file (image **sama** dengan asli):
 
    ```bash
-   docker run --rm -it \
+   docker run -d --name mysql-root-reset --entrypoint mysqld \
      -v <VOLUME_NAME>:/var/lib/mysql \
      -v /tmp/reset.sql:/reset.sql:ro \
-     mysql:8 --init-file=/reset.sql --skip-networking
-   # tunggu "ready for connections", lalu Ctrl+C
+     <IMAGE_ASLI> --user=mysql --init-file=/reset.sql --skip-networking
+   docker logs mysql-root-reset | grep "ready for connections"
+   docker stop mysql-root-reset && docker rm mysql-root-reset
    ```
-
-   Gunakan versi **mayor yang sama** dengan image asli (mis. `mysql:8` vs `mysql:8.4`).
 
 5. Nyalakan container asli & uji:
 
    ```bash
    docker start mysql-itrust
-   mysql -h127.0.0.1 -P3307 -uroot -p -e "SELECT VERSION();"
+   docker exec -e MYSQL_PWD='PasswordBaru#123' mysql-itrust mysql -uroot -e 'SELECT VERSION();'
    ```
 
 ### C. Alternatif: `--skip-grant-tables`
@@ -291,7 +241,7 @@ pernah diubah). Cek juga file compose/`docker run` yang dipakai untuk membuatnya
 docker stop mysql-itrust
 docker run --rm -it --name mysql-recover \
   -v <VOLUME_NAME>:/var/lib/mysql \
-  mysql:8 --skip-grant-tables --skip-networking
+  <IMAGE_ASLI> --user=mysql --skip-grant-tables --skip-networking
 ```
 
 Di terminal lain:
@@ -305,30 +255,43 @@ ALTER USER 'root'@'localhost' IDENTIFIED BY 'PasswordBaru#123';
 Selalu pakai `--skip-networking`; tanpa itu siapa pun bisa login tanpa password. Setelah selesai
 hentikan container recovery, lalu `docker start mysql-itrust`.
 
-### D. Kalau data boleh hilang (paling cepat)
+### D. Kalau data MySQL boleh hilang
+
+Container MySQL yang ada **jangan** dihapus kalau masih ada data. Bila memang boleh hilang, cara
+paling rapi adalah pindah ke compose yang mengelola DB sendiri (volume `db_data`):
 
 ```bash
-docker compose down -v      # hapus volume MySQL
-docker compose up -d        # init ulang dengan MYSQL_ROOT_PASSWORD baru
+docker stop mysql-itrust             # bebaskan port 3307
+docker compose -f docker-compose.with-db.yml up -d --build
 ```
 
 ### E. Setelah berhasil masuk
 
-1. Perbarui `AUREUS_DB_PASSWORD` di `.env`/`docker-compose.yml` API, lalu `docker compose up -d`.
-2. Buat user aplikasi khusus (§2) dan hentikan pemakaian `root` untuk aplikasi.
-3. Simpan password di password manager.
+1. Perbarui `MYSQL_ROOT_PASSWORD`/`AUREUS_DB_PASSWORD` di `.env`.
+2. Jalankan ulang API: `docker compose up -d --force-recreate`.
+3. Buat user aplikasi khusus (§2) dan hentikan pemakaian `root` untuk aplikasi.
 
+---
 
-## 9. Varian: iTrust + modul ERP
+## 9. Varian lain
 
-Kalau yang dijalankan adalah **iTrust + modul ERP** (`OLD/itrust`, dokumen root `web/`), polanya sama:
+**a) Ingin DB dijalankan Docker juga** (tidak memakai container yang ada):
 
-1. Build dari folder itu (`Dockerfile` di atas bisa dipakai apa adanya — docroot `web/`).
-2. Tambahkan env modul: `AUREUS_DB_*` menunjuk DB ERP (mis. `itrust_erp` di MySQL container),
-   serta `.env`/`SetEnv` untuk `YII_ENV`, `AUREUS_CORS_ORIGINS`.
-3. Modul memakai `modules/erp/config/db.php` (membaca `AUREUS_DB_*`, termasuk `AUREUS_DB_PORT`)
-   atau `modules/erp/config/db.local.php` (di-gitignore).
-4. URL API menjadi `http://localhost:8888/erp/api/v1` (bila document root `web/`).
+```bash
+docker compose -f docker-compose.with-db.yml up -d --build
+# service `db` (mysql:8.0) mempublish 127.0.0.1:3307; API konek ke host `db`
+```
 
-> Jangan menaruh kredensial di `docker-compose.yml` yang di-commit untuk produksi. Untuk server,
-> gunakan `.env` (compose otomatis membacanya) atau `docker secrets`.
+Drop `*.sql` ke `docker/mysql/init/` agar diimpor otomatis saat volume DB pertama kali dibuat.
+
+**b) iTrust + modul ERP** (`OLD/itrust`, docroot `web/`):
+
+1. Build dari folder itu (`Dockerfile` di atas bisa dipakai apa adanya).
+2. Env `AUREUS_DB_*` → DB ERP (mis. `erp` di container MySQL yang ada), plus `YII_ENV`,
+   `AUREUS_CORS_ORIGINS`.
+3. Modul membaca `modules/erp/config/db.php` (`AUREUS_DB_*`, termasuk `AUREUS_DB_PORT`) atau
+   `modules/erp/config/db.local.php` (di-gitignore).
+4. URL API menjadi `http://localhost:8888/erp/api/v1`.
+
+> Jangan menaruh kredensial produksi di `docker-compose.yml` yang di-commit. Gunakan `.env`
+> (compose membacanya otomatis) atau `docker secrets`.

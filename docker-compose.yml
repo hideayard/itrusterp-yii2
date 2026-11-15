@@ -1,70 +1,35 @@
 # ============================================================================
-#  iTrustERP — API Yii2 + MySQL 8.0 (all-in-one)
+#  iTrustERP — API Yii2 (Docker) memakai MySQL container yang SUDAH ADA
+#
+#  Tidak ada service database di berkas ini: MySQL tetap di container yang sudah
+#  jalan (contoh: mysql-itrust, publish 0.0.0.0:3307->3306).
 #
 #  Jalankan:  docker compose up -d --build
 #  API      :  http://localhost:8888/admin/api/v1
-#  MySQL    :  127.0.0.1:3307  (user: itrust / itrust_password, db: erp)
+#  MySQL    :  host.docker.internal:3307  (db: erp, user: itrust / itrust_password)
 #
-#  Kredensial bisa dioverride lewat berkas .env di folder ini (compose membaca
-#  .env otomatis untuk substitusi ${...}).
+#  Kredensial bisa dioverride lewat berkas .env (compose membaca .env otomatis
+#  untuk substitusi ${...}).
 # ============================================================================
 
 name: itrust-erp
 
 services:
-  db:
-    image: mysql:8.0
-    container_name: itrust-db
-    restart: unless-stopped
-    command:
-      - --character-set-server=utf8mb4
-      - --collation-server=utf8mb4_unicode_ci
-      # Aktifkan hanya bila ada klien PHP lama yang belum mendukung caching_sha2:
-      # - --default-authentication-plugin=mysql_native_password
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_password}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-erp}
-      MYSQL_USER: ${MYSQL_USER:-itrust}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-itrust_password}
-      # Informasi versi mayor (tidak mengubah perilaku image, hanya penanda)
-      MYSQL_MAJOR: "8.0"
-      TZ: Asia/Jakarta
-    ports:
-      # host:container — hanya listen di loopback host
-      - "127.0.0.1:3307:3306"
-    volumes:
-      - db_data:/var/lib/mysql
-      # Semua *.sql / *.sh di folder ini diimpor OTOMATIS saat volume masih kosong
-      - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
-    healthcheck:
-      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_ROOT_PASSWORD mysqladmin ping -h127.0.0.1 -uroot --silent"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 40s
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-
   api:
     build: .
     image: itrusterp-yii2:latest
     container_name: itrust-api
     restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
     ports:
+      # host:container → API di http://localhost:8888
       - "8888:80"
     environment:
       YII_ENV: ${YII_ENV:-prod}
       YII_DEBUG: "false"
 
-      # Nama service `db` otomatis jadi hostname di network compose
-      AUREUS_DB_HOST: db
-      AUREUS_DB_PORT: "3306"
+      # host.docker.internal = mesin host (Mint). 3307 = port publish container MySQL.
+      AUREUS_DB_HOST: ${AUREUS_DB_HOST:-host.docker.internal}
+      AUREUS_DB_PORT: ${AUREUS_DB_PORT:-3307}
       AUREUS_DB: ${MYSQL_DATABASE:-erp}
       AUREUS_DB_USER: ${MYSQL_USER:-itrust}
       AUREUS_DB_PASSWORD: ${MYSQL_PASSWORD:-itrust_password}
@@ -72,6 +37,9 @@ services:
       AUREUS_CORS_ORIGINS: ${AUREUS_CORS_ORIGINS:-https://itrust-erp.pages.dev,https://erp.rimondaglobaldigital.com,http://localhost:4321}
       AUREUS_TOKEN_TTL_DAYS: "90"
       TZ: Asia/Jakarta
+    extra_hosts:
+      # Wajib di Linux agar host.docker.internal bisa di-resolve
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1/admin/api/v1 >/dev/null || exit 1"]
       interval: 30s
@@ -84,5 +52,15 @@ services:
         max-size: "10m"
         max-file: "3"
 
-volumes:
-  db_data:
+#  Alternatif: gabung ke network milik container MySQL lalu pakai nama container
+#  sebagai host (tanpa host gateway).
+#    docker inspect mysql-itrust --format '{{json .NetworkSettings.Networks}}'
+#
+#  networks:
+#    default:
+#      external: true
+#      name: <nama-network-mysql>
+#
+#  lalu set AUREUS_DB_HOST=mysql-itrust dan AUREUS_DB_PORT=3306.
+#
+#  Ingin DB dijalankan Docker juga? Pakai docker-compose.with-db.yml.
