@@ -162,6 +162,14 @@ Alternatif saat pengembangan: tambahkan bind mount di `docker-compose.yml`:
 
 ## 8. Lupa password MySQL di container
 
+> Cara tercepat: pakai skrip `scripts/reset-mysql-root.sh` (stop → backup → reset via `--init-file`
+> → start). Langkah manualnya di bawah.
+>
+> ```bash
+> chmod +x scripts/reset-mysql-root.sh
+> ./scripts/reset-mysql-root.sh mysql-itrust 'PasswordBaru#123'
+> ```
+
 ### A. Cari dulu dari konfigurasi container (sering masih tersimpan)
 
 ```bash
