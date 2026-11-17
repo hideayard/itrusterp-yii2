@@ -9,6 +9,8 @@ dist
 .env
 .env.local
 .env.*.local
+# env container dibaca compose dari host, tidak perlu masuk image
+docker/env
 tests
 *.log
 tmp-*

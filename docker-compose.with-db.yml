@@ -4,9 +4,13 @@
 #  Pakai berkas ini HANYA bila memang mau menjalankan container MySQL baru.
 #  Untuk memakai MySQL yang sudah ada, gunakan docker-compose.yml (default).
 #
+#  Env terpisah:
+#      docker/env/api.env   → container API
+#      docker/env/db.env    → container MySQL
+#
 #  Jalankan:  docker compose -f docker-compose.with-db.yml up -d --build
 #  API      :  http://localhost:8888/admin/api/v1
-#  MySQL    :  127.0.0.1:3307  (db: erp, user: itrust / itrust_password)
+#  MySQL    :  127.0.0.1:3307
 # ============================================================================
 
 name: itrust-erp-db
@@ -21,13 +25,8 @@ services:
       - --collation-server=utf8mb4_unicode_ci
       # Aktifkan hanya bila ada klien PHP lama yang belum mendukung caching_sha2:
       # - --default-authentication-plugin=mysql_native_password
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_password}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-erp}
-      MYSQL_USER: ${MYSQL_USER:-itrust}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-itrust_password}
-      MYSQL_MAJOR: "8.0"
-      TZ: Asia/Jakarta
+    env_file:
+      - ./docker/env/db.env
     ports:
       # Sesuaikan bila 3307 sudah dipakai container MySQL yang lain.
       - "127.0.0.1:3307:3306"
@@ -55,22 +54,14 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    ports:
-      - "8888:80"
+    env_file:
+      - ./docker/env/api.env
     environment:
-      YII_ENV: ${YII_ENV:-prod}
-      YII_DEBUG: "false"
-
-      # Nama service `db` otomatis jadi hostname di network compose
+      # Menimpa env_file: arahkan ke service `db` di network compose.
       AUREUS_DB_HOST: db
       AUREUS_DB_PORT: "3306"
-      AUREUS_DB: ${MYSQL_DATABASE:-erp}
-      AUREUS_DB_USER: ${MYSQL_USER:-itrust}
-      AUREUS_DB_PASSWORD: ${MYSQL_PASSWORD:-itrust_password}
-
-      AUREUS_CORS_ORIGINS: ${AUREUS_CORS_ORIGINS:-https://itrust-erp.pages.dev,https://erp.rimondaglobaldigital.com,http://localhost:4321}
-      AUREUS_TOKEN_TTL_DAYS: "90"
-      TZ: Asia/Jakarta
+    ports:
+      - "8888:80"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1/admin/api/v1 >/dev/null || exit 1"]
       interval: 30s

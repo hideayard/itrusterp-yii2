@@ -10,7 +10,8 @@ Laptop (Mint 22)
         └── host.docker.internal:3307 → MySQL container
 ```
 
-Kredensial & port:
+Kredensial & port (sumber konfigurasi container: **`docker/env/api.env`**, contohnya
+`docker/env/api.env.example`):
 
 | Variabel | Nilai |
 |---|---|
@@ -75,11 +76,21 @@ mysql -h127.0.0.1 -P3307 -uitrust -pitrust_password erp < erp.sql
 | `Dockerfile` | PHP 8.2 + Apache, docroot **`/var/www/html/web`**, ekstensi `pdo_mysql intl zip mbstring gd opcache`, `AllowOverride All` |
 | `docker-compose.yml` | **Default**: hanya service `api` (publish **8888:80**), DB = container MySQL yang sudah ada |
 | `docker-compose.with-db.yml` | Opsional: menambah service `db` (MySQL 8.0) bila mau DB dari Docker |
-| `.env.example` | Kredensial DB + CORS + TTL token |
-| `.dockerignore` | mengecualikan `vendor/`, `runtime/`, `.git`, `.env`, dll. |
+| `docker/env/api.env` | Env container **API** (DB, `YII_ENV`, CORS, TTL token, `TZ`) — jangan di-commit; contoh: `docker/env/api.env.example` |
+| `docker/env/db.env` | Env container **MySQL** (hanya dipakai `docker-compose.with-db.yml`); contoh: `docker/env/db.env.example` |
+| `.dockerignore` | mengecualikan `vendor/`, `runtime/`, `.git`, `.env`, `docker/env`, dll. |
+
+Env dipisah per container dan masuk lewat `env_file:` di compose — jadi variabelnya benar-benar
+menjadi **environment di dalam container** (tidak perlu `.env` di root, tidak perlu set env di
+Apache). Salin contohnya sekali:
+
+```bash
+cp docker/env/api.env.example docker/env/api.env
+cp docker/env/db.env.example  docker/env/db.env     # hanya bila pakai with-db.yml
+```
 
 Catatan: `config/db.php` membaca `AUREUS_DB_HOST`, **`AUREUS_DB_PORT`** (default 3306), `AUREUS_DB`,
-`AUREUS_DB_USER`, `AUREUS_DB_PASSWORD` dari `.env`.
+`AUREUS_DB_USER`, `AUREUS_DB_PASSWORD`.
 
 ---
 
@@ -88,7 +99,7 @@ Catatan: `config/db.php` membaca `AUREUS_DB_HOST`, **`AUREUS_DB_PORT`** (default
 ```bash
 cd ~/ERP/aureuserp-yii2        # sesuaikan lokasi project
 
-cp .env.example .env           # opsional, default sudah sesuai container yang ada
+cp docker/env/api.env.example docker/env/api.env   # sesuaikan bila perlu
 docker compose config          # validasi
 docker compose up -d --build   # build image + jalankan API
 docker compose ps
@@ -267,7 +278,8 @@ docker compose -f docker-compose.with-db.yml up -d --build
 
 ### E. Setelah berhasil masuk
 
-1. Perbarui `MYSQL_ROOT_PASSWORD`/`AUREUS_DB_PASSWORD` di `.env`.
+1. Perbarui `AUREUS_DB_PASSWORD` di `docker/env/api.env` (dan `docker/env/db.env` bila memakai
+   MySQL sebagai service).
 2. Jalankan ulang API: `docker compose up -d --force-recreate`.
 3. Buat user aplikasi khusus (§2) dan hentikan pemakaian `root` untuk aplikasi.
 
@@ -281,6 +293,9 @@ docker compose -f docker-compose.with-db.yml up -d --build
 docker compose -f docker-compose.with-db.yml up -d --build
 # service `db` (mysql:8.0) mempublish 127.0.0.1:3307; API konek ke host `db`
 ```
+
+Env-nya: `docker/env/db.env` untuk MySQL dan `docker/env/api.env` untuk API (host/port DB ditimpa
+oleh blok `environment:` di compose, jadi tidak perlu diubah manual).
 
 Drop `*.sql` ke `docker/mysql/init/` agar diimpor otomatis saat volume DB pertama kali dibuat.
 

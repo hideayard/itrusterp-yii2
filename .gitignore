@@ -8,6 +8,9 @@
 .env
 .env.local
 .env.*.local
+# Env container (yang asli jangan di-commit; bawaan .example ikut)
+/docker/env/*.env
+!/docker/env/*.env.example
 
 # Runtime Yii2 (log, cache, debug)
 /runtime/*

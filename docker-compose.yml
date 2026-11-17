@@ -4,12 +4,11 @@
 #  Tidak ada service database di berkas ini: MySQL tetap di container yang sudah
 #  jalan (contoh: mysql-itrust, publish 0.0.0.0:3307->3306).
 #
+#  Konfigurasi container diambil dari berkas env terpisah:
+#      docker/env/api.env        (salin dari docker/env/api.env.example)
+#
 #  Jalankan:  docker compose up -d --build
 #  API      :  http://localhost:8888/admin/api/v1
-#  MySQL    :  host.docker.internal:3307  (db: erp, user: itrust / itrust_password)
-#
-#  Kredensial bisa dioverride lewat berkas .env (compose membaca .env otomatis
-#  untuk substitusi ${...}).
 # ============================================================================
 
 name: itrust-erp
@@ -20,23 +19,12 @@ services:
     image: itrusterp-yii2:latest
     container_name: itrust-api
     restart: unless-stopped
+    # Seluruh variabel (DB, YII_ENV, CORS, token TTL, TZ) masuk dari sini.
+    env_file:
+      - ./docker/env/api.env
     ports:
       # host:container → API di http://localhost:8888
       - "8888:80"
-    environment:
-      YII_ENV: ${YII_ENV:-prod}
-      YII_DEBUG: "false"
-
-      # host.docker.internal = mesin host (Mint). 3307 = port publish container MySQL.
-      AUREUS_DB_HOST: ${AUREUS_DB_HOST:-host.docker.internal}
-      AUREUS_DB_PORT: ${AUREUS_DB_PORT:-3307}
-      AUREUS_DB: ${MYSQL_DATABASE:-erp}
-      AUREUS_DB_USER: ${MYSQL_USER:-itrust}
-      AUREUS_DB_PASSWORD: ${MYSQL_PASSWORD:-itrust_password}
-
-      AUREUS_CORS_ORIGINS: ${AUREUS_CORS_ORIGINS:-https://itrust-erp.pages.dev,https://erp.rimondaglobaldigital.com,http://localhost:4321}
-      AUREUS_TOKEN_TTL_DAYS: "90"
-      TZ: Asia/Jakarta
     extra_hosts:
       # Wajib di Linux agar host.docker.internal bisa di-resolve
       - "host.docker.internal:host-gateway"
@@ -52,15 +40,10 @@ services:
         max-size: "10m"
         max-file: "3"
 
-#  Alternatif: gabung ke network milik container MySQL lalu pakai nama container
-#  sebagai host (tanpa host gateway).
-#    docker inspect mysql-itrust --format '{{json .NetworkSettings.Networks}}'
-#
-#  networks:
-#    default:
-#      external: true
-#      name: <nama-network-mysql>
-#
-#  lalu set AUREUS_DB_HOST=mysql-itrust dan AUREUS_DB_PORT=3306.
-#
-#  Ingin DB dijalankan Docker juga? Pakai docker-compose.with-db.yml.
+#  Catatan:
+#  - `environment:` pada service akan MENIMPA nilai dari env_file (lihat
+#    docker-compose.with-db.yml yang memakainya untuk mengarahkan host DB).
+#  - Alternatif hostname: gabung ke network container MySQL lalu set
+#    AUREUS_DB_HOST=mysql-itrust dan AUREUS_DB_PORT=3306 di docker/env/api.env.
+#      docker inspect mysql-itrust --format '{{json .NetworkSettings.Networks}}'
+#  - Ingin DB dijalankan Docker juga? Pakai docker-compose.with-db.yml.
