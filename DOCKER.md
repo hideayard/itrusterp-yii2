@@ -189,6 +189,48 @@ Alternatif saat pengembangan — bind mount di `docker-compose.yml`:
 | Healthcheck `unhealthy` | `docker compose logs api` |
 | Port 8888/3307 dipakai proses lain | ganti port host di compose, mis. `"8889:80"` |
 
+### Diagnosa `"database":"unreachable"`
+
+Jalankan berurutan dari dalam container — ini memisahkan masalah env / jaringan / kredensial:
+
+```bash
+# 1) env yang benar-benar masuk container
+docker compose exec api env | grep -E 'AUREUS_DB|YII_'
+
+# 2) pesan error asli (health check mencatatnya)
+docker compose exec api tail -n 30 runtime/logs/app.log
+
+# 3) jalur TCP ke MySQL (host + port publish)
+docker compose exec api php -r '$e=$s=null;$p=@fsockopen("host.docker.internal",3307,$e,$s,3); var_dump($p!==false,$e,$s);'
+
+# 4) autentikasi MySQL tanpa dbname (memisahkan masalah user vs database)
+docker compose exec api php -r 'try{new PDO("mysql:host=host.docker.internal;port=3307","itrust","itrust_password");echo "auth OK\n";}catch(Throwable $x){echo $x->getMessage(),"\n";}'
+
+# 5) user & database di sisi MySQL
+docker exec -it mysql-itrust mysql -uroot -p -e \
+  "SELECT user,host FROM mysql.user WHERE user IN ('itrust','root'); SHOW DATABASES LIKE 'erp';"
+```
+
+Membaca hasilnya:
+
+| Kegagalan | Artinya | Solusi |
+|---|---|---|
+| langkah 3 `false` | jalur ke host:3307 tertutup | pastikan MySQL publish `0.0.0.0:3307->3306` (`docker ps`), `extra_hosts: host-gateway` ada, atau pakai IP gateway: `docker compose exec api ip route \| grep default` → set `AUREUS_DB_HOST=<ip>` (mis. `172.17.0.1`) |
+| langkah 4 `[2002] Connection refused` | host/port salah | samakan `AUREUS_DB_PORT` dengan port publish MySQL |
+| langkah 4 `[1045] Access denied` | user belum ada untuk host container | buat `'itrust'@'%'` dengan `GRANT ALL ON erp.*` (§2) |
+| langkah 4 OK, tapi health tetap degraded | database belum ada | `CREATE DATABASE IF NOT EXISTS erp …` (§2) |
+| langkah 1 kosong | `env_file` tidak terbaca | pastikan `docker/env/api.env` ada, lalu `docker compose up -d --force-recreate` |
+
+Untuk melihat error langsung di response (hanya untuk debugging), set sementara
+`YII_DEBUG=true` di `docker/env/api.env`:
+
+```bash
+docker compose up -d --force-recreate
+curl -s http://localhost:8888/ | python3 -m json.tool   # muncul database_error + database_config
+```
+
+Setelah selesai, kembalikan `YII_DEBUG=false` dan recreate lagi.
+
 ---
 
 ## 8. Lupa password MySQL di container
