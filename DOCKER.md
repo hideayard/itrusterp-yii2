@@ -109,13 +109,22 @@ docker compose logs -f api     # pantau
 Uji:
 
 ```bash
-curl -s http://localhost:8888/admin/api/v1
+# root (sejak rute '' ditambahkan) → info + status API
+curl -s http://localhost:8888/
 # {"data":{"name":"iTrustERP API","status":"ok","database":"connected",...}}
+
+# base path API sebenarnya:
+curl -s http://localhost:8888/admin/api/v1
 
 curl -s -X POST http://localhost:8888/admin/api/v1/login \
   -H "Content-Type: application/json" \
   -d '{"login":"admin","password":"admin123"}'
 ```
+
+> Membuka `localhost:8888` di browser sebelum rute root ada akan menampilkan
+> `{"message":"Resource not found."}` — itu benar, karena base path API adalah `/admin/api/v1`.
+> Setelah rute root ada (rebuild image), `/` menampilkan info API, dan `database` di situ bisa
+> dipakai untuk memastikan koneksi DB berhasil.
 
 Kalau `database` bukan `connected` → lihat §7.
 

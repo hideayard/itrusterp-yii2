@@ -3,6 +3,9 @@
 $resources = require __DIR__ . '/resources.php';
 
 $rules = [
+    // Root: membuka http://localhost:8888 langsung di browser menampilkan info/status API
+    // (base path sebenarnya tetap /admin/api/v1).
+    ['class' => 'yii\web\UrlRule', 'pattern' => '', 'route' => 'v1/meta/index', 'verb' => 'GET'],
     ['class' => 'yii\web\UrlRule', 'pattern' => 'admin/api/v1', 'route' => 'v1/meta/index', 'verb' => 'GET'],
     ['class' => 'yii\web\UrlRule', 'pattern' => 'admin/api/v1<slash:/>', 'route' => 'v1/meta/index', 'verb' => 'GET'],
     ['class' => 'yii\web\UrlRule', 'pattern' => 'admin/api/v1/system/resources', 'route' => 'v1/meta/resources', 'verb' => 'GET'],
