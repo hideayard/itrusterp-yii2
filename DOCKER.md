@@ -209,7 +209,22 @@ docker compose exec api php -r 'try{new PDO("mysql:host=host.docker.internal;por
 # 5) user & database di sisi MySQL
 docker exec -it mysql-itrust mysql -uroot -p -e \
   "SELECT user,host FROM mysql.user WHERE user IN ('itrust','root'); SHOW DATABASES LIKE 'erp';"
+
+# 6) PENENTU: cetak DSN yang dipakai aplikasi + coba konek dengan config itu
+docker compose exec api php -r '
+$db = require "/var/www/html/config/db.php";
+echo "DSN : ", $db["dsn"], PHP_EOL, "user: ", $db["username"], PHP_EOL;
+try { new PDO($db["dsn"], $db["username"], $db["password"], $db["attributes"] ?? []); echo "connect OK\n"; }
+catch (Throwable $e) { echo "ERROR: ", $e->getMessage(), PHP_EOL; }'
+
+# 7) hak akses user pada database
+docker exec -it mysql-itrust mysql -uroot -p -e "SHOW GRANTS FOR 'itrust'@'%';"
 ```
+
+Langkah 6 adalah yang paling menentukan: kalau DSN-nya **tidak memuat `;port=3307`**, berarti image
+masih kode lama (sebelum dukungan `AUREUS_DB_PORT`) → `docker compose build --no-cache api && docker compose up -d`.
+Kalau DSN benar tapi error `Access denied … to database 'erp'`, berarti grant-nya belum ada
+(`GRANT ALL PRIVILEGES ON erp.* TO 'itrust'@'%'`).
 
 Membaca hasilnya:
 
