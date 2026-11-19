@@ -44,6 +44,12 @@ Kalau port publikasinya bukan 3307, catat dan sesuaikan `AUREUS_DB_PORT`.
 Dilakukan **sekali** saja, langsung di dalam container MySQL (tidak perlu password root bila
 kamu bisa `docker exec` — klausa `-p` di bawah hanya perlu bila root punya password):
 
+> PENTING: variabel `MYSQL_DATABASE`/`MYSQL_USER`/`MYSQL_PASSWORD` (di `docker/env/db.env`) **hanya
+> dipakai saat container MySQL baru dibuat pertama kali**. Untuk container MySQL yang sudah berjalan
+> (mis. `mysql-itrust` yang sudah hidup berbulan-bulan), variabel itu diabaikan — database, user, dan
+> hak akses **harus** dibuat lewat SQL seperti di bawah. Kalau tidak, backend akan gagal dengan
+> `[1044] Access denied for user … to database …` walaupun user & database-nya "ada".
+
 ```bash
 docker exec -it mysql-itrust mysql -uroot -proot_password -e "
 CREATE DATABASE IF NOT EXISTS erp CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -181,6 +187,7 @@ Alternatif saat pengembangan — bind mount di `docker-compose.yml`:
 | `500` di semua request | `runtime/` / `web/assets/` tidak writable → `docker compose exec api chown -R www-data:www-data runtime web/assets` |
 | `[2002] Connection refused` | Host/port DB salah. Dari container, `localhost` = container itu sendiri. Pakai `host.docker.internal` + `AUREUS_DB_PORT=3307` (port publikasi container MySQL) dan pastikan `extra_hosts: host-gateway` ada |
 | `[1045] Access denied` | User `itrust@'%'` belum dibuat / password beda (§2) |
+| `[1044] Access denied for user 'itrust'@'%' to database 'erp'` | User **ada**, tapi belum diberi hak pada database itu. `MYSQL_USER`/`MYSQL_DATABASE` di `db.env` **tidak** berlaku untuk container MySQL yang sudah lama ada (Docker hanya membuatnya saat volume DB pertama kali diinisialisasi). Perbaiki lewat SQL: `GRANT ALL PRIVILEGES ON erp.* TO 'itrust'@'%'; FLUSH PRIVILEGES;` |
 | `[1049] Unknown database 'erp'` | Database belum dibuat atau dump belum diimpor (§2) |
 | `host.docker.internal` tidak resolve | `extra_hosts: ["host.docker.internal:host-gateway"]` belum ada |
 | `404` di semua endpoint | Document root bukan `web/`. Cek `curl -I http://localhost:8888/index.php` |

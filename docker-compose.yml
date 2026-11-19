@@ -1,17 +1,10 @@
-# ============================================================================
-#  iTrustERP — API Yii2 (Docker) memakai MySQL container yang SUDAH ADA
-#
-#  Tidak ada service database di berkas ini: MySQL tetap di container yang sudah
-#  jalan (contoh: mysql-itrust, publish 0.0.0.0:3307->3306).
-#
-#  Konfigurasi container diambil dari berkas env terpisah:
-#      docker/env/api.env        (salin dari docker/env/api.env.example)
-#
-#  Jalankan:  docker compose up -d --build
-#  API      :  http://localhost:8888/admin/api/v1
-# ============================================================================
-
+# docker-compose.yml
 name: itrust-erp
+
+networks:
+  default:
+    external: true
+    name: mysql_mysql-network
 
 services:
   api:
@@ -19,31 +12,14 @@ services:
     image: itrusterp-yii2:latest
     container_name: itrust-api
     restart: unless-stopped
-    # Seluruh variabel (DB, YII_ENV, CORS, token TTL, TZ) masuk dari sini.
     env_file:
       - ./docker/env/api.env
     ports:
-      # host:container → API di http://localhost:8888
       - "8888:80"
-    extra_hosts:
-      # Wajib di Linux agar host.docker.internal bisa di-resolve
-      - "host.docker.internal:host-gateway"
+    # extra_hosts TIDAK diperlukan lagi
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1/admin/api/v1 >/dev/null || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 20s
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-#  Catatan:
-#  - `environment:` pada service akan MENIMPA nilai dari env_file (lihat
-#    docker-compose.with-db.yml yang memakainya untuk mengarahkan host DB).
-#  - Alternatif hostname: gabung ke network container MySQL lalu set
-#    AUREUS_DB_HOST=mysql-itrust dan AUREUS_DB_PORT=3306 di docker/env/api.env.
-#      docker inspect mysql-itrust --format '{{json .NetworkSettings.Networks}}'
-#  - Ingin DB dijalankan Docker juga? Pakai docker-compose.with-db.yml.
