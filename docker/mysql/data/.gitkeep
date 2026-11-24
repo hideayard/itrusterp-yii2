@@ -1,0 +1,2 @@
+Folder ini menampung data MySQL (bind mount ke /var/lib/mysql).
+Isinya diabaikan git; hanya .gitkeep yang ikut ter-commit.

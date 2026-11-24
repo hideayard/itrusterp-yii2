@@ -1,0 +1,75 @@
+# ============================================================================
+#  MySQL 8.0 untuk iTrustERP — dijalankan sendiri (tanpa container API)
+#
+#  Cara pakai:
+#      cp docker/env/db.env.example docker/env/db.env      # sesuaikan kredensial
+#      docker compose -f docker/mysql/docker-compose.yml up -d
+#
+#  Akses:
+#      dari host           → 127.0.0.1:3307   (mis. DBeaver/TablePlus)
+#      dari container lain → host `mysql` (network itrust-db-network)
+#                            atau  host.docker.internal:3307 (host gateway)
+#
+#  Data      : docker/mysql/data        (bind mount; tidak di-commit)
+#  Init dump : docker/mysql/init/*.sql  (dijalankan otomatis saat data masih kosong)
+#  Stop      : docker compose -f docker/mysql/docker-compose.yml down
+# ============================================================================
+
+name: itrust-mysql
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: itrust-db
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      # Aktifkan hanya bila ada klien lama yang belum mendukung caching_sha2:
+      # - --default-authentication-plugin=mysql_native_password
+    # Kredensial: MYSQL_ROOT_PASSWORD, MYSQL_DATABASE, MYSQL_USER, MYSQL_PASSWORD, TZ
+    env_file:
+      - ../env/db.env
+    ports:
+      # host:container — hanya listen di loopback host
+      - "127.0.0.1:3307:3306"
+    volumes:
+      # Data persisten (hapus isinya = database hilang)
+      - ./data:/var/lib/mysql
+      # *.sql / *.sh di sini diimpor otomatis saat volume masih kosong
+      - ./init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_ROOT_PASSWORD mysqladmin ping -h127.0.0.1 -uroot --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    networks:
+      default:
+        # alias tetap `mysql` supaya container lain bisa memakai AUREUS_DB_HOST=mysql
+        aliases:
+          - mysql
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  default:
+    # Nama tetap agar container API bisa bergabung:
+    #   networks:
+    #     default:
+    #       external: true
+    #       name: itrust-db-network
+    name: itrust-db-network
+
+# Catatan:
+# - Kalau ingin memakai named volume alih-alih bind mount, ganti `./data:/var/lib/mysql`
+#   dengan `db_data:/var/lib/mysql` dan tambahkan:
+#       volumes:
+#         db_data:
+# - Port 3307 bentrok bila ada MySQL lain (mis. container `mysql-itrust`).
+#   Hentikan dulu atau ubah menjadi "127.0.0.1:3308:3306".
+# - Setelah container berjalan, database `erp` + user dibuat otomatis dari
+#   MYSQL_DATABASE/MYSQL_USER hanya kalau folder data masih kosong.

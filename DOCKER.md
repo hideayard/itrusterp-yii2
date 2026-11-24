@@ -81,9 +81,9 @@ mysql -h127.0.0.1 -P3307 -uitrust -pitrust_password erp < erp.sql
 |---|---|
 | `Dockerfile` | PHP 8.2 + Apache, docroot **`/var/www/html/web`**, ekstensi `pdo_mysql intl zip mbstring gd opcache`, `AllowOverride All` |
 | `docker-compose.yml` | **Default**: hanya service `api` (publish **8888:80**), DB = container MySQL yang sudah ada |
-| `docker-compose.with-db.yml` | Opsional: menambah service `db` (MySQL 8.0) bila mau DB dari Docker |
+| `docker/mysql/docker-compose.yml` | **MySQL 8.0 saja** (tanpa API): publish `127.0.0.1:3307`, data di `docker/mysql/data`, init dump di `docker/mysql/init` |
 | `docker/env/api.env` | Env container **API** (DB, `YII_ENV`, CORS, TTL token, `TZ`) — jangan di-commit; contoh: `docker/env/api.env.example` |
-| `docker/env/db.env` | Env container **MySQL** (hanya dipakai `docker-compose.with-db.yml`); contoh: `docker/env/db.env.example` |
+| `docker/env/db.env` | Env container **MySQL** (`docker/mysql/docker-compose.yml`); contoh: `docker/env/db.env.example` |
 | `.dockerignore` | mengecualikan `vendor/`, `runtime/`, `.git`, `.env`, `docker/env`, dll. |
 
 Env dipisah per container dan masuk lewat `env_file:` di compose — jadi variabelnya benar-benar
@@ -92,7 +92,7 @@ Apache). Salin contohnya sekali:
 
 ```bash
 cp docker/env/api.env.example docker/env/api.env
-cp docker/env/db.env.example  docker/env/db.env     # hanya bila pakai with-db.yml
+cp docker/env/db.env.example  docker/env/db.env     # hanya bila pakai MySQL dari Docker
 ```
 
 Catatan: `config/db.php` membaca `AUREUS_DB_HOST`, **`AUREUS_DB_PORT`** (default 3306), `AUREUS_DB`,
@@ -346,7 +346,8 @@ paling rapi adalah pindah ke compose yang mengelola DB sendiri (volume `db_data`
 
 ```bash
 docker stop mysql-itrust             # bebaskan port 3307
-docker compose -f docker-compose.with-db.yml up -d --build
+cp docker/env/db.env.example docker/env/db.env
+docker compose -f docker/mysql/docker-compose.yml up -d
 ```
 
 ### E. Setelah berhasil masuk
@@ -360,17 +361,35 @@ docker compose -f docker-compose.with-db.yml up -d --build
 
 ## 9. Varian lain
 
-**a) Ingin DB dijalankan Docker juga** (tidak memakai container yang ada):
+**a) Menjalankan MySQL sendiri di Docker** (tanpa container API):
 
 ```bash
-docker compose -f docker-compose.with-db.yml up -d --build
-# service `db` (mysql:8.0) mempublish 127.0.0.1:3307; API konek ke host `db`
+cp docker/env/db.env.example docker/env/db.env      # sesuaikan kredensial
+docker compose -f docker/mysql/docker-compose.yml up -d
+
+# cek
+docker exec -it itrust-db mysql -uroot -proot_password -e "SHOW DATABASES;"
+# dari host: 127.0.0.1:3307
 ```
 
-Env-nya: `docker/env/db.env` untuk MySQL dan `docker/env/api.env` untuk API (host/port DB ditimpa
-oleh blok `environment:` di compose, jadi tidak perlu diubah manual).
+Lalu arahkan API ke server itu — dua pilihan:
 
-Drop `*.sql` ke `docker/mysql/init/` agar diimpor otomatis saat volume DB pertama kali dibuat.
+```bash
+# opsi 1: lewat host gateway (tidak perlu ubah network)
+#   docker/env/api.env → AUREUS_DB_HOST=host.docker.internal , AUREUS_DB_PORT=3307
+#   dan pastikan extra_hosts: ["host.docker.internal:host-gateway"] ada di docker-compose.yml
+
+# opsi 2: gabung network MySQL (lebih kokoh, tanpa port host)
+#   docker-compose.yml →
+#     networks:
+#       default:
+#         external: true
+#         name: itrust-db-network
+#   docker/env/api.env → AUREUS_DB_HOST=mysql , AUREUS_DB_PORT=3306
+```
+
+Data MySQL tersimpan di `docker/mysql/data` (di-gitignore). Drop `*.sql` ke
+`docker/mysql/init/` agar diimpor otomatis saat data masih kosong.
 
 **b) iTrust + modul ERP** (`OLD/itrust`, docroot `web/`):
 
