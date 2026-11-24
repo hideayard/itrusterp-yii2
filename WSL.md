@@ -255,6 +255,43 @@ docker system df                   # kalau penuh: docker system prune -a
 
 ---
 
+### Docker: `docker-credential-secretservice: ... libsecret-1.so.0`
+
+Gejala saat `docker compose up -d` / pull image:
+
+```
+docker-credential-secretservice: error while loading shared libraries: libsecret-1.so.0: cannot open shared object file
+error getting credentials - err: exit status 127
+```
+
+Itu bukan masalah image/MySQL: Docker CLI dikonfigurasi memakai credential helper
+`docker-credential-secretservice` (di `~/.docker/config.json` → `credsStore`), sedangkan lib-nya belum
+terpasang di distro WSL tersebut. Dua perbaikan (pilih salah satu):
+
+```bash
+# A) pasang libsecret (cara paling langsung)
+sudo apt update && sudo apt install -y libsecret-1-0
+docker compose -f docker/mysql/docker-compose.yml up -d
+
+# B) lepaskan credential helper dari config Docker
+cp ~/.docker/config.json ~/.docker/config.json.bak 2>/dev/null || true
+python3 - <<'PY'
+import json, pathlib
+p = pathlib.Path.home() / '.docker' / 'config.json'
+d = json.loads(p.read_text() or '{}')
+d.pop('credsStore', None)
+d.pop('credHelpers', None)
+p.write_text(json.dumps(d, indent=2))
+print('credsStore dihapus:', d)
+PY
+docker compose -f docker/mysql/docker-compose.yml up -d
+```
+
+Setelah itu cek `cat ~/.docker/config.json` (sebaiknya tinggal `{"auths": {}}`). Kredensial Docker Hub
+akan disimpan di berkas itu (base64) alih-alih di keyring — cukup aman untuk laptop pribadi.
+
+---
+
 ## 10. Ringkasan alur harian
 
 ```powershell
