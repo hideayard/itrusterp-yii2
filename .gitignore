@@ -46,3 +46,6 @@ Thumbs.db
 # PHPUnit
 tests/_output/*
 tests/_support/_generated
+# Dump database (data, bukan kode)
+/docker/mysql/init/*.sql
+/docker/mysql/init/*.sql.gz
