@@ -239,7 +239,7 @@ docker system df                   # kalau penuh: docker system prune -a
 |---|---|
 | Disk C: penuh (vhdx tak bisa tumbuh) | bebaskan ruang → `wsl --manage Ubuntu --set-sparse true` → compact vdisk |
 | Build dari `/mnt/e/...` (DrvFs 9p) | pindahkan proyek ke `~` (§4) |
-| `/var/lib/docker` rusak pasca-crash | `sudo systemctl stop docker && sudo rm -rf /var/lib/docker/* && sudo systemctl start docker` (image/container hilang; data di bind mount `docker/mysql/data` tetap) |
+| `/var/lib/docker` rusak pasca-crash | `sudo systemctl stop docker && sudo rm -rf /var/lib/docker/* && sudo systemctl start docker` (image/container hilang; data MySQL di named volume `itrust-mysql_db_data` juga hilang) |
 | Binary docker sendiri error | `sudo apt install --reinstall docker-ce-cli` atau restart Docker Desktop |
 | Drive `E:` bermasalah | `wsl --shutdown` lalu `chkdsk E: /f` **[Windows]** |
 

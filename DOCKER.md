@@ -84,7 +84,7 @@ mysql -h127.0.0.1 -P3307 -uitrust -pitrust_password erp < erp.sql
 |---|---|
 | `Dockerfile` | PHP 8.2 + Apache, docroot **`/var/www/html/web`**, ekstensi `pdo_mysql intl zip mbstring gd opcache`, `AllowOverride All` |
 | `docker-compose.yml` | **Default**: hanya service `api` (publish **8888:80**), bergabung ke network `${DB_NETWORK:-itrust-db-network}` milik MySQL |
-| `docker/mysql/docker-compose.yml` | **MySQL 8.0 saja** (tanpa API): publish `127.0.0.1:3307`, data di `docker/mysql/data`, init dump di `docker/mysql/init` |
+| `docker/mysql/docker-compose.yml` | **MySQL 8.0 saja** (tanpa API): publish `127.0.0.1:3307`, data di named volume `itrust-mysql_db_data`, init dump di `docker/mysql/init` |
 | `docker/env/api.env` | Env container **API** (DB, `YII_ENV`, CORS, TTL token, `TZ`) — jangan di-commit; contoh: `docker/env/api.env.example` |
 | `docker/env/db.env` | Env container **MySQL** (`docker/mysql/docker-compose.yml`); contoh: `docker/env/db.env.example` |
 | `.dockerignore` | mengecualikan `vendor/`, `runtime/`, `.git`, `.env`, `docker/env`, dll. |
@@ -240,6 +240,7 @@ Alternatif saat pengembangan — bind mount di `docker-compose.yml`:
 | `500` di semua request | `runtime/` / `web/assets/` tidak writable → `docker compose exec api chown -R www-data:www-data runtime web/assets` |
 | `[2002] Connection refused` | Host/port DB salah. Dari container, `localhost` = container itu sendiri. Pakai `host.docker.internal` + `AUREUS_DB_PORT=3307` (port publikasi container MySQL) dan pastikan `extra_hosts: host-gateway` ada |
 | `[1045] Access denied` | User `itrust@'%'` belum dibuat / password beda (§2) |
+| Container MySQL `Restarting (1)` terus | lihat `docker logs itrust-db --tail 80` lalu cocokkan: `Permission denied`/`os_file_create` → datadir berada di DrvFs (`/mnt/*`) atau izin salah → pakai named volume; `Data Dictionary version is newer/older` → datadir dibuat versi MySQL lain; `InnoDB ... corruption` → hapus volume lalu impor ulang; `Database is uninitialized and password option is not specified` → isi `MYSQL_ROOT_PASSWORD` di `docker/env/db.env`; `No space left on device` → bebaskan ruang disk |
 | `[1044] Access denied for user 'itrust'@'%' to database 'erp'` | User **ada**, tapi belum diberi hak pada database itu. `MYSQL_USER`/`MYSQL_DATABASE` di `db.env` **tidak** berlaku untuk container MySQL yang sudah lama ada (Docker hanya membuatnya saat volume DB pertama kali diinisialisasi). Perbaiki lewat SQL: `GRANT ALL PRIVILEGES ON erp.* TO 'itrust'@'%'; FLUSH PRIVILEGES;` |
 | `[1049] Unknown database 'erp'` | Database belum dibuat atau dump belum diimpor (§2) |
 | `host.docker.internal` tidak resolve | `extra_hosts: ["host.docker.internal:host-gateway"]` belum ada |
@@ -503,8 +504,16 @@ AUREUS_DB_HOST=host.docker.internal
 AUREUS_DB_PORT=3307
 ```
 
-Data MySQL tersimpan di `docker/mysql/data` (di-gitignore). Drop `*.sql` ke
-`docker/mysql/init/` agar diimpor otomatis saat data masih kosong.
+Data MySQL disimpan di named volume `itrust-mysql_db_data` (filesystem Linux). Jangan arahkan
+datadir ke `/mnt/c`/`/mnt/e` (DrvFs) — MySQL bisa gagal start atau datanya rusak. Drop `*.sql` ke
+`docker/mysql/init/` agar diimpor otomatis saat volume masih kosong.
+
+```bash
+docker volume ls | grep db_data                 # lihat
+docker compose -f docker/mysql/docker-compose.yml down
+docker volume rm itrust-mysql_db_data           # hapus = database hilang
+docker compose -f docker/mysql/docker-compose.yml up -d   # init ulang + impor init/*.sql
+```
 
 **b) iTrust + modul ERP** (`OLD/itrust`, docroot `web/`):
 

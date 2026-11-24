@@ -3,7 +3,7 @@
 #
 #   cp erp.sql docker/mysql/init/01-erp.sql
 #   docker compose -f docker/mysql/docker-compose.yml down
-#   rm -rf docker/mysql/data/*          # hati-hati: data lama terhapus
+#   docker volume rm itrust-mysql_db_data      # hati-hati: data lama terhapus
 #   docker compose -f docker/mysql/docker-compose.yml up -d
 #
 # Urutan impor mengikuti nama berkas (01-..., 02-...). Berkas *.sh juga dijalankan.

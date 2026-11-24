@@ -10,7 +10,7 @@
 #      dari container lain → host `mysql` (network itrust-db-network)
 #                            atau  host.docker.internal:3307 (host gateway)
 #
-#  Data      : docker/mysql/data        (bind mount; tidak di-commit)
+#  Data      : named volume `itrust-mysql_db_data` (lihat `docker volume ls`)
 #  Init dump : docker/mysql/init/*.sql  (dijalankan otomatis saat data masih kosong)
 #  Stop      : docker compose -f docker/mysql/docker-compose.yml down
 # ============================================================================
@@ -34,8 +34,12 @@ services:
       # host:container — hanya listen di loopback host
       - "127.0.0.1:3307:3306"
     volumes:
-      # Data persisten (hapus isinya = database hilang)
-      - ./data:/var/lib/mysql
+      # Named volume: berada di filesystem Linux (ext4), stabil untuk InnoDB.
+      # JANGAN pakai folder di /mnt/c atau /mnt/e (DrvFs Windows) — MySQL butuh
+      # chown/O_DIRECT yang tidak didukung di sana (datadir bisa gagal/corrupt).
+      # Kalau tetap ingin folder fisik, arahkan ke ext4, mis.:
+      #   - /home/<user>/mysql-data:/var/lib/mysql
+      - db_data:/var/lib/mysql
       # *.sql / *.sh di sini diimpor otomatis saat volume masih kosong
       - ./init:/docker-entrypoint-initdb.d:ro
     healthcheck:
@@ -61,6 +65,10 @@ networks:
     # Bisa dioverride lewat .env → DB_NETWORK=<nama-network>
     name: ${DB_NETWORK:-itrust-db-network}
 
+volumes:
+  # Data MySQL (nama nyata: itrust-mysql_db_data)
+  db_data:
+
 # ---------------------------------------------------------------------------
 # Kalau muncul error iptables saat membuat network, mis.:
 #   "Failed to Setup IP tables: Unable to enable ACCEPT OUTGOING rule ...
@@ -77,11 +85,12 @@ networks:
 # ---------------------------------------------------------------------------
 
 # Catatan:
-# - Kalau ingin memakai named volume alih-alih bind mount, ganti `./data:/var/lib/mysql`
-#   dengan `db_data:/var/lib/mysql` dan tambahkan:
-#       volumes:
-#         db_data:
+# - Data disimpan di named volume `itrust-mysql_db_data` (filesystem Linux). Lihat/hapus:
+#       docker volume ls | grep db_data
+#       docker volume rm itrust-mysql_db_data     # hapus = database hilang (dijalankan saat container berhenti)
+# - Jangan arahkan datadir ke /mnt/c atau /mnt/e (DrvFs) — MySQL bisa gagal start/corrupt.
+#   Kalau perlu folder fisik, pakai path ext4: /home/<user>/mysql-data:/var/lib/mysql
 # - Port 3307 bentrok bila ada MySQL lain (mis. container `mysql-itrust`).
 #   Hentikan dulu atau ubah menjadi "127.0.0.1:3308:3306".
-# - Setelah container berjalan, database `erp` + user dibuat otomatis dari
-#   MYSQL_DATABASE/MYSQL_USER hanya kalau folder data masih kosong.
+# - Database `erp` + user dibuat otomatis dari MYSQL_DATABASE/MYSQL_USER hanya saat
+#   volume masih kosong (pertama kali). Kalau sudah terisi, isi `db.env` diabaikan.
