@@ -84,7 +84,7 @@ mysql -h127.0.0.1 -P3307 -uitrust -pitrust_password erp < erp.sql
 |---|---|
 | `Dockerfile` | PHP 8.2 + Apache, docroot **`/var/www/html/web`**, ekstensi `pdo_mysql intl zip mbstring gd opcache`, `AllowOverride All` |
 | `docker-compose.yml` | **Default**: hanya service `api` (publish **8888:80**), bergabung ke network `${DB_NETWORK:-itrust-db-network}` milik MySQL |
-| `docker/mysql/docker-compose.yml` | **MySQL 8.0 saja** (tanpa API): publish `127.0.0.1:3307`, data di named volume `itrust-mysql_db_data`, init dump di `docker/mysql/init` |
+| `docker/mysql/docker-compose.yml` | **MySQL 8.0 saja** (tanpa API): publish `127.0.0.1:3307`, data di named volume `itrust-mysql_db_data`, init dump di `docker/mysql/init`, user baru pakai `mysql_native_password` |
 | `docker/env/api.env` | Env container **API** (DB, `YII_ENV`, CORS, TTL token, `TZ`) — jangan di-commit; contoh: `docker/env/api.env.example` |
 | `docker/env/db.env` | Env container **MySQL** (`docker/mysql/docker-compose.yml`); contoh: `docker/env/db.env.example` |
 | `.dockerignore` | mengecualikan `vendor/`, `runtime/`, `.git`, `.env`, `docker/env`, dll. |
@@ -187,11 +187,21 @@ Di DBeaver/TablePlus/HeidiSQL: host `127.0.0.1`, port `3307`, database `erp`, us
 
 > **DBeaver + MySQL 8 (`Public Key Retrieval is not allowed`)**: MySQL 8 memakai
 > `caching_sha2_password`; klien JDBC perlu izin mengambil kunci publik server.
-> Tab **Driver properties** → `allowPublicKeyRetrieval = true` (dan `useSSL = false` untuk koneksi
-> lokal), atau ubah JDBC URL:
+> Repo ini sudah menanganinya untuk container baru: `docker/mysql/docker-compose.yml` memakai
+> `--default-authentication-plugin=mysql_native_password`, dan
+> `docker/mysql/init/00-auth-native-password.sh` memaksa user aplikasi memakai
+> `mysql_native_password` + grant-nya (hanya berjalan saat volume DB masih kosong).
+> Untuk volume yang **sudah ada**, jalankan manual:
+>
+> ```bash
+> docker exec -it itrust-db mysql -uroot -proot_password -e "
+> ALTER USER 'itrust'@'%' IDENTIFIED WITH mysql_native_password BY 'itrust_password';
+> FLUSH PRIVILEGES;"
+> ```
+>
+> Alternatif tanpa mengubah server: tab **Driver properties** → `allowPublicKeyRetrieval = true`,
+> `useSSL = false`; atau JDBC URL
 > `jdbc:mysql://localhost:3307/erp?allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=UTC`.
-> Alternatif di sisi server (sekali saja):
-> `ALTER USER 'itrust'@'%' IDENTIFIED WITH mysql_native_password BY 'itrust_password'; FLUSH PRIVILEGES;`
 
 Agar paling andal, publish semua antarmuka di dalam WSL (bukan hanya loopback):
 

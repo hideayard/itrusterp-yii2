@@ -25,8 +25,10 @@ services:
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
-      # Aktifkan hanya bila ada klien lama yang belum mendukung caching_sha2:
-      # - --default-authentication-plugin=mysql_native_password
+      # User baru memakai mysql_native_password agar klien lama (DBeaver/JDBC,
+      # library PHP lama) tidak kena "Public Key Retrieval is not allowed".
+      # Flag ini ada di MySQL 8.0; di 8.4+ ganti dengan --mysql-native-password=ON.
+      - --default-authentication-plugin=mysql_native_password
     # Kredensial: MYSQL_ROOT_PASSWORD, MYSQL_DATABASE, MYSQL_USER, MYSQL_PASSWORD, TZ
     env_file:
       - ../env/db.env
