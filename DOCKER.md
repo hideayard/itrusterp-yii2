@@ -25,6 +25,9 @@ Kredensial & port (sumber konfigurasi container: **`docker/env/api.env`**, conto
 
 ## 1. Prasyarat (Mint 22)
 
+> Menjalankan di **WSL2** (Windows)? Lihat juga [`WSL.md`](./WSL.md) — daftar perintah WSL, cara
+> mengakses MySQL dari Windows, dan pemulihan saat build crash (`SIGBUS`).
+
 ```bash
 sudo apt install -y docker.io docker-compose-v2
 sudo usermod -aG docker "$USER"   # logout/login agar berlaku
@@ -168,9 +171,59 @@ docker compose up -d --build
 docker compose down
 ```
 
+### Akses MySQL dari Windows (host) — kasus WSL2
+
+MySQL berjalan di Docker **di dalam VM WSL2**, jadi dari Windows host ada tiga jalur:
+
+**1. Localhost forwarding (cara utama, tanpa setup tambahan)** — cukup connect ke `127.0.0.1`:
+
+```powershell
+Test-NetConnection 127.0.0.1 -Port 3307        # TcpTestSucceeded : True
+# klien Windows (contoh pakai mysql.exe Laragon):
+& "E:\laragon6\bin\mysql\mysql-8.4.3-winx64\bin\mysql.exe" -h127.0.0.1 -P3307 -uitrust -pitrust_password erp -e "SELECT VERSION();"
+```
+
+Di DBeaver/TablePlus/HeidiSQL: host `127.0.0.1`, port `3307`, database `erp`, user `itrust`.
+
+Agar paling andal, publish semua antarmuka di dalam WSL (bukan hanya loopback):
+
+```yaml
+# docker/mysql/docker-compose.yml
+ports:
+  - "3307:3306"        # sebelumnya "127.0.0.1:3307:3306"
+```
+
+**2. Pakai IP WSL** (kalau localhost forwarding tidak jalan):
+
+```bash
+# di dalam WSL
+hostname -I | awk '{print $1}'     # mis. 172.24.145.10
+ss -ltnp | grep 3307               # pastikan listen di 0.0.0.0:3307
+```
+```powershell
+# di Windows
+Test-NetConnection 172.24.145.10 -Port 3307
+# catatan: IP ini berubah setiap WSL restart
+```
+
+**3. Mirrored networking** (IP WSL = IP Windows, paling stabil):
+
+```ini
+# C:\Users\<nama>\.wslconfig
+[wsl2]
+networkingMode=mirrored
+```
+```powershell
+wsl --shutdown    # lalu masuk lagi
+```
+
+Kalau koneksi ditolak: cek (a) MySQL benar-benar listen — `docker exec itrust-db ss -ltnp | grep 3306`,
+(b) user mengizinkan host asal — `SHOW GRANTS FOR 'itrust'@'%'` (koneksi dari Windows terlihat sebagai
+IP gateway bridge, jadi butuh user `'%'`, bukan `'localhost'`), (c) Windows Defender Firewall tidak
+memblokir vEthernet/WSL.
+
 Perubahan kode **tidak** otomatis masuk (image di-COPY saat build), jadi rebuild seperti di atas.
 Alternatif saat pengembangan — bind mount di `docker-compose.yml`:
-
 ```yaml
     volumes:
       - ./:/var/www/html
