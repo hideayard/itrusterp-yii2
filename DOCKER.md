@@ -195,6 +195,7 @@ Alternatif saat pengembangan — bind mount di `docker-compose.yml`:
 | `Class not found` setelah update kode | rebuild image (autoload di-generate saat build) |
 | Healthcheck `unhealthy` | `docker compose logs api` |
 | Port 8888/3307 dipakai proses lain | ganti port host di compose, mis. `"8889:80"` |
+| `Failed to Setup IP tables: Unable to enable ACCEPT OUTGOING rule` / `iptables: No chain/target/match by that name` saat membuat network | Docker daemon di host kehilangan chain iptables (biasanya setelah docker di-upgrade tanpa restart, atau `firewalld`/`ufw`/`iptables -F` membersihkan rule). Perbaikan: `sudo systemctl restart docker` lalu ulangi `up -d`. Bila tetap: `sudo modprobe br_netfilter`, `sudo sysctl -w net.ipv4.ip_forward=1`, cek/ matikan `firewalld` (`sudo systemctl disable --now firewalld`), atau pakai `network_mode: host` (lihat catatan di `docker/mysql/docker-compose.yml`) |
 
 ### Diagnosa `"database":"unreachable"`
 

@@ -64,6 +64,21 @@ networks:
     #       name: itrust-db-network
     name: itrust-db-network
 
+# ---------------------------------------------------------------------------
+# Kalau muncul error iptables saat membuat network, mis.:
+#   "Failed to Setup IP tables: Unable to enable ACCEPT OUTGOING rule ...
+#    iptables: No chain/target/match by that name"
+# itu masalah Docker daemon di host, bukan berkas ini. Perbaikan tersering:
+#   sudo systemctl restart docker
+# lalu ulangi `docker compose ... up -d`.
+#
+# Bila tetap gagal, pakai mode host: MySQL listen langsung di host (port 3306),
+# tanpa bridge/iptables baru. Ganti blok ports/networks di atas dengan:
+#   network_mode: host
+# lalu set di docker/env/api.env → AUREUS_DB_HOST=127.0.0.1 , AUREUS_DB_PORT=3306
+# (dari container lain: host.docker.internal:3306).
+# ---------------------------------------------------------------------------
+
 # Catatan:
 # - Kalau ingin memakai named volume alih-alih bind mount, ganti `./data:/var/lib/mysql`
 #   dengan `db_data:/var/lib/mysql` dan tambahkan:
