@@ -185,6 +185,14 @@ Test-NetConnection 127.0.0.1 -Port 3307        # TcpTestSucceeded : True
 
 Di DBeaver/TablePlus/HeidiSQL: host `127.0.0.1`, port `3307`, database `erp`, user `itrust`.
 
+> **DBeaver + MySQL 8 (`Public Key Retrieval is not allowed`)**: MySQL 8 memakai
+> `caching_sha2_password`; klien JDBC perlu izin mengambil kunci publik server.
+> Tab **Driver properties** → `allowPublicKeyRetrieval = true` (dan `useSSL = false` untuk koneksi
+> lokal), atau ubah JDBC URL:
+> `jdbc:mysql://localhost:3307/erp?allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=UTC`.
+> Alternatif di sisi server (sekali saja):
+> `ALTER USER 'itrust'@'%' IDENTIFIED WITH mysql_native_password BY 'itrust_password'; FLUSH PRIVILEGES;`
+
 Agar paling andal, publish semua antarmuka di dalam WSL (bukan hanya loopback):
 
 ```yaml

@@ -46,3 +46,5 @@ tests/_support/_generated
 # Dump database (data, bukan kode)
 /docker/mysql/init/*.sql
 /docker/mysql/init/*.sql.gz
+# Sisa datadir bind-mount lama (data sekarang di named volume itrust-mysql_db_data)
+/docker/mysql/data/
