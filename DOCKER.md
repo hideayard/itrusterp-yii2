@@ -83,7 +83,7 @@ mysql -h127.0.0.1 -P3307 -uitrust -pitrust_password erp < erp.sql
 | Berkas | Fungsi |
 |---|---|
 | `Dockerfile` | PHP 8.2 + Apache, docroot **`/var/www/html/web`**, ekstensi `pdo_mysql intl zip mbstring gd opcache`, `AllowOverride All` |
-| `docker-compose.yml` | **Default**: hanya service `api` (publish **8888:80**), DB = container MySQL yang sudah ada |
+| `docker-compose.yml` | **Default**: hanya service `api` (publish **8888:80**), bergabung ke network `${DB_NETWORK:-itrust-db-network}` milik MySQL |
 | `docker/mysql/docker-compose.yml` | **MySQL 8.0 saja** (tanpa API): publish `127.0.0.1:3307`, data di `docker/mysql/data`, init dump di `docker/mysql/init` |
 | `docker/env/api.env` | Env container **API** (DB, `YII_ENV`, CORS, TTL token, `TZ`) — jangan di-commit; contoh: `docker/env/api.env.example` |
 | `docker/env/db.env` | Env container **MySQL** (`docker/mysql/docker-compose.yml`); contoh: `docker/env/db.env.example` |
@@ -466,20 +466,41 @@ docker exec -it itrust-db mysql -uroot -proot_password -e "SHOW DATABASES;"
 # dari host: 127.0.0.1:3307
 ```
 
-Lalu arahkan API ke server itu — dua pilihan:
+Lalu arahkan API ke server itu. **Default repo sudah begitu**: `docker-compose.yml` memakai network
+`${DB_NETWORK:-itrust-db-network}` (dibuat oleh compose MySQL) dan `docker/env/api.env` memakai
+`AUREUS_DB_HOST=mysql`, `AUREUS_DB_PORT=3306`.
 
 ```bash
-# opsi 1: lewat host gateway (tidak perlu ubah network)
-#   docker/env/api.env → AUREUS_DB_HOST=host.docker.internal , AUREUS_DB_PORT=3307
-#   dan pastikan extra_hosts: ["host.docker.internal:host-gateway"] ada di docker-compose.yml
+docker compose -f docker/mysql/docker-compose.yml up -d   # MySQL dulu (membuat network)
+cp docker/env/api.env.example docker/env/api.env
+docker compose up -d --build
+```
 
-# opsi 2: gabung network MySQL (lebih kokoh, tanpa port host)
-#   docker-compose.yml →
-#     networks:
-#       default:
-#         external: true
-#         name: itrust-db-network
-#   docker/env/api.env → AUREUS_DB_HOST=mysql , AUREUS_DB_PORT=3306
+> Urutannya penting: network dibuat oleh compose MySQL. Karena itu jangan `docker compose down` di
+> folder `docker/mysql` (network ikut terhapus → API error `network ... declared as external, but
+> could not be found`); pakai `stop`, atau buat network-nya sekali:
+> `docker network create itrust-db-network`.
+>
+> Kalau MySQL-mu sudah jalan sebagai container lain dengan network sendiri, cukup set di root `.env`:
+> ```dotenv
+> DB_NETWORK=mysql_mysql-network
+> ```
+> lalu sesuaikan `AUREUS_DB_HOST`/`AUREUS_DB_PORT` di `docker/env/api.env`.
+
+**Alternatif tanpa network bersama** (pakai host gateway):
+
+```yaml
+# docker/mysql/docker-compose.yml → publish ke semua antarmuka
+ports:
+  - "3307:3306"
+# docker-compose.yml → tambahkan
+extra_hosts:
+  - "host.docker.internal:host-gateway"
+```
+```dotenv
+# docker/env/api.env
+AUREUS_DB_HOST=host.docker.internal
+AUREUS_DB_PORT=3307
 ```
 
 Data MySQL tersimpan di `docker/mysql/data` (di-gitignore). Drop `*.sql` ke

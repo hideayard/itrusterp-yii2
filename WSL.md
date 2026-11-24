@@ -180,6 +180,14 @@ networkingMode=mirrored
 wsl --shutdown    # masuk lagi
 ```
 
+Catatan: **container API tidak lewat jalur di atas** — ia bergabung ke network Docker dan memakai
+`AUREUS_DB_HOST=mysql`, `AUREUS_DB_PORT=3306`. Jadi urutannya:
+
+```bash
+docker compose -f docker/mysql/docker-compose.yml up -d   # MySQL + network
+docker compose up -d --build                              # API
+```
+
 Kalau ditolak: (a) cek container listen → `docker exec itrust-db ss -ltnp | grep 3306`,
 (b) hak user → `SHOW GRANTS FOR 'itrust'@'%'` (koneksi dari Windows tampak sebagai IP gateway
 bridge, maka butuh user `'%'`, bukan `'localhost'`), (c) Windows Defender Firewall tidak memblokir

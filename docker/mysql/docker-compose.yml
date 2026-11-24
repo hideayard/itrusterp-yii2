@@ -57,12 +57,9 @@ services:
 
 networks:
   default:
-    # Nama tetap agar container API bisa bergabung:
-    #   networks:
-    #     default:
-    #       external: true
-    #       name: itrust-db-network
-    name: itrust-db-network
+    # Nama network dipakai bersama container API (lihat docker-compose.yml root).
+    # Bisa dioverride lewat .env → DB_NETWORK=<nama-network>
+    name: ${DB_NETWORK:-itrust-db-network}
 
 # ---------------------------------------------------------------------------
 # Kalau muncul error iptables saat membuat network, mis.:
