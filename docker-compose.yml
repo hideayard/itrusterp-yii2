@@ -13,8 +13,13 @@
 #             DB_NETWORK=mysql_mysql-network
 #         lalu sesuaikan AUREUS_DB_HOST/PORT di docker/env/api.env.
 #
-#  Jalankan:  docker compose up -d --build
-#  API      :  http://localhost:8888/admin/api/v1
+#  Cara cepat (urutan otomatis + pembuatan network):
+#      cp docker/env/db.env.example  docker/env/db.env
+#      cp docker/env/api.env.example docker/env/api.env
+#      ./scripts/docker-up.sh
+#
+#  Manual:  docker compose up -d --build
+#  API   :  http://localhost:8888/admin/api/v1
 # ============================================================================
 
 name: itrust-erp
@@ -36,6 +41,10 @@ services:
       - ./docker/env/api.env
     ports:
       - "8888:80"
+    extra_hosts:
+      # Tidak wajib untuk jalur network bersama, tapi memudahkan kalau suatu saat
+      # memakai AUREUS_DB_HOST=host.docker.internal
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1/admin/api/v1 >/dev/null || exit 1"]
       interval: 30s

@@ -105,9 +105,21 @@ Catatan: `config/db.php` membaca `AUREUS_DB_HOST`, **`AUREUS_DB_PORT`** (default
 
 ## 4. Jalankan API
 
+Cara tercepat — skrip ini mengurus urutan (network → MySQL → tunggu healthy → API):
+
+```bash
+cd ~/ERP/aureuserp-yii2
+cp docker/env/db.env.example  docker/env/db.env      # sesuaikan kredensial
+cp docker/env/api.env.example docker/env/api.env
+./scripts/docker-up.sh          # --build bila mau paksa rebuild, status/down/destroy juga tersedia
+```
+
+Manual:
+
 ```bash
 cd ~/ERP/aureuserp-yii2        # sesuaikan lokasi project
 
+docker compose -f docker/mysql/docker-compose.yml up -d   # MySQL dulu (membuat network)
 cp docker/env/api.env.example docker/env/api.env   # sesuaikan bila perlu
 docker compose config          # validasi
 docker compose up -d --build   # build image + jalankan API

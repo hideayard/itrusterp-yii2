@@ -262,8 +262,15 @@ docker system df                   # kalau penuh: docker system prune -a
 wsl --cd ~/aureuserp-yii2
 ```
 ```bash
-# [WSL]
+# [WSL] — cara cepat (urutan: network → MySQL → tunggu healthy → API)
 sudo service docker start
+./scripts/docker-up.sh
+# status / hentikan:
+./scripts/docker-up.sh status
+./scripts/docker-up.sh down      # network tetap; data MySQL tetap
+```
+```bash
+# [WSL] — manual
 docker compose -f docker/mysql/docker-compose.yml up -d      # MySQL
 docker compose up -d --build                                 # API
 curl -s http://localhost:8888/ | grep -o '"status":"[^"]*"'  # {"status":"ok"}
