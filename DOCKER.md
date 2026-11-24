@@ -197,6 +197,46 @@ Alternatif saat pengembangan — bind mount di `docker-compose.yml`:
 | Port 8888/3307 dipakai proses lain | ganti port host di compose, mis. `"8889:80"` |
 | `Failed to Setup IP tables: Unable to enable ACCEPT OUTGOING rule` / `iptables: No chain/target/match by that name` saat membuat network | Docker daemon di host kehilangan chain iptables (biasanya setelah docker di-upgrade tanpa restart, atau `firewalld`/`ufw`/`iptables -F` membersihkan rule). Perbaikan: `sudo systemctl restart docker` lalu ulangi `up -d`. Bila tetap: `sudo modprobe br_netfilter`, `sudo sysctl -w net.ipv4.ip_forward=1`, cek/ matikan `firewalld` (`sudo systemctl disable --now firewalld`), atau pakai `network_mode: host` (lihat catatan di `docker/mysql/docker-compose.yml`) |
 
+### WSL2: crash saat build / `Input/output error`
+
+Gejala: `unexpected fault address … SIGBUS`, `panic during panic` saat `exporting to image`, lalu
+perintah apa pun gagal dengan `bash: /usr/bin/docker: Input/output error`.
+
+Itu I/O failure pada disk WSL, bukan masalah compose/image. Urutan penanganan:
+
+```bash
+# 1) di dalam WSL — cek ruang disk
+df -h /
+
+# 2) di Windows (PowerShell) — cek ruang C: (tempat file ext4.vhdx WSL) dan E:
+Get-PSDrive C,E | Select-Object Name,@{n='FreeGB';e={[math]::Round($_.Free/1GB,1)}}
+
+# 3) matikan WSL, lalu buka lagi (pulihkan driver/9p & daemon)
+wsl --shutdown
+wsl --update
+```
+
+Sesudah WSL hidup lagi:
+
+```bash
+sudo service docker start        # atau: sudo systemctl start docker
+docker ps
+docker system df                 # kalau penuh: docker system prune -a (hati-hati: hapus image/container)
+```
+
+Penyebab paling sering di WSL:
+
+| Penyebab | Perbaikan |
+|---|---|
+| Disk C: penuh (vhdx tidak bisa tumbuh) | bebaskan ruang, lalu `wsl --manage <distro> --set-sparse true` dan `Optimize-VHD`/`diskpart compact vdisk` |
+| Build dijalankan dari `/mnt/e/...` (DrvFs 9p) | pindahkan proyek ke filesystem Linux, mis. `cp -a /mnt/e/laragon6/www/ERP/aureuserp-yii2 ~/aureuserp-yii2`, build dari situ |
+| `/var/lib/docker` rusak setelah crash | `sudo systemctl stop docker`, `sudo rm -rf /var/lib/docker/*` (**semua image & container hilang**), start lagi |
+| Perintah `docker` sendiri yang error | `sudo apt install --reinstall docker-ce-cli` (atau restart Docker Desktop dari Windows) |
+| Luncurkan ke `/mnt/e` yang bermasalah | `wsl --shutdown` lalu `chkdsk E: /f` dari Windows |
+
+Saran umum: simpan proyek Yii2 & jalankan `docker compose` dari **filesystem Linux WSL**
+(`~/project`), bukan `/mnt/c` atau `/mnt/e`.
+
 ### Diagnosa `"database":"unreachable"`
 
 Jalankan berurutan dari dalam container — ini memisahkan masalah env / jaringan / kredensial:
