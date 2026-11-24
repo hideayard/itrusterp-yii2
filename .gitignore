@@ -12,9 +12,6 @@
 /docker/env/*.env
 !/docker/env/*.env.example
 
-# Data MySQL (bind mount docker/mysql) — jangan pernah di-commit
-/docker/mysql/data/*
-!/docker/mysql/data/.gitkeep
 
 # Runtime Yii2 (log, cache, debug)
 /runtime/*
