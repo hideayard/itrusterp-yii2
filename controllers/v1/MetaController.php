@@ -71,6 +71,61 @@ class MetaController extends ApiController
         return ['data' => $data];
     }
 
+    /**
+     * Hitung total baris beberapa resource dalam SATU request.
+     * Dipakai dashboard supaya tidak menembak puluhan request (di API lokal
+     * Apache mengantre dan halaman jadi lambat).
+     *
+     * GET /system/stats?resources=partners/partners,products/products,…
+     * Response: {"data":{"partners/partners":123,"products/products":32199}}
+     */
+    public function actionStats()
+    {
+        $raw = (string) Yii::$app->request->get('resources', '');
+        $wanted = array_values(array_filter(array_map('trim', explode(',', $raw)), static fn ($p) => $p !== ''));
+        if ($wanted === []) {
+            throw new \yii\web\BadRequestHttpException('Parameter resources wajib diisi.');
+        }
+
+        $registry = require Yii::getAlias('@app/config/resources.php');
+
+        // Hanya pola statis (tanpa parameter) yang bisa dihitung langsung.
+        $byPattern = [];
+        foreach ($registry as $cfg) {
+            $pattern = (string) ($cfg['pattern'] ?? '');
+            if ($pattern !== '' && !str_contains($pattern, '<')) {
+                $byPattern[$pattern] = $cfg;
+            }
+        }
+
+        $data = [];
+        foreach ($wanted as $pattern) {
+            $cfg = $byPattern[$pattern] ?? null;
+            $modelClass = $cfg['model'] ?? null;
+            if ($cfg === null || !is_string($modelClass) || !class_exists($modelClass)) {
+                continue;
+            }
+
+            $permission = $cfg['permission'] ?? null;
+            if ($permission !== null && !Yii::$app->access->can('view_any_' . $permission)) {
+                continue;
+            }
+
+            try {
+                $query = $modelClass::find();
+                $baseWhere = $cfg['baseWhere'] ?? null;
+                if (is_array($baseWhere) && $baseWhere !== []) {
+                    $query->andWhere($baseWhere);
+                }
+                $data[$pattern] = (int) $query->count();
+            } catch (\Throwable $e) {
+                Yii::error('system/stats gagal untuk ' . $pattern . ': ' . $e->getMessage(), __METHOD__);
+            }
+        }
+
+        return ['data' => $data];
+    }
+
     public function actionResources()
     {
         $registry = require Yii::getAlias('@app/config/resources.php');

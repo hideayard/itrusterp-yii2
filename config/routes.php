@@ -9,6 +9,7 @@ $rules = [
     ['class' => 'yii\web\UrlRule', 'pattern' => 'admin/api/v1', 'route' => 'v1/meta/index', 'verb' => 'GET'],
     ['class' => 'yii\web\UrlRule', 'pattern' => 'admin/api/v1<slash:/>', 'route' => 'v1/meta/index', 'verb' => 'GET'],
     ['class' => 'yii\web\UrlRule', 'pattern' => 'admin/api/v1/system/resources', 'route' => 'v1/meta/resources', 'verb' => 'GET'],
+    ['class' => 'yii\web\UrlRule', 'pattern' => 'admin/api/v1/system/stats', 'route' => 'v1/meta/stats', 'verb' => 'GET'],
     ['class' => 'yii\web\UrlRule', 'pattern' => 'admin/api/v1/login', 'route' => 'v1/auth/login', 'verb' => 'POST'],
     ['class' => 'yii\web\UrlRule', 'pattern' => 'admin/api/v1/logout', 'route' => 'v1/auth/logout', 'verb' => 'POST'],
     ['class' => 'yii\web\UrlRule', 'pattern' => 'admin/api/v1/<path:.*>', 'route' => 'v1/error/options', 'verb' => 'OPTIONS'],
