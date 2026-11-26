@@ -81,7 +81,12 @@ foreach ($files as $file) {
 
     $code = preg_replace('/^namespace app\\\\/m', 'namespace erp\\', $code);
     $code = preg_replace('/^use app\\\\/m', 'use erp\\', $code);
-    $code = preg_replace('/(?<![\w$])app\\\\(?=[A-Z])/', 'erp\\\\', $code);
+    // Bentuk fully-qualified (mis. `\app\models\User::class` di config/resources.php)
+    // HARUS ikut di-rewrite: `app\models\User` milik iTrust bukan ActiveRecord
+    // (tidak punya find()), sehingga endpoint /security/users gagal.
+    $code = preg_replace('/\\\\app\\\\(?=[A-Za-z])/', '\\\\erp\\\\', $code);
+    // Referensi `app\...` lain (termasuk path lowercase seperti app\models\...).
+    $code = preg_replace('/(?<![\w$])app\\\\(?=[A-Za-z])/', 'erp\\\\', $code);
     $code = str_replace("'@app/config/", "'@erp/config/", $code);
     $code = str_replace('"@app/config/', '"@erp/config/', $code);
 
