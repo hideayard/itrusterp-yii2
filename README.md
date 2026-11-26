@@ -840,6 +840,19 @@ WHERE p.name LIKE 'pos\_%';
 Token user tersebut akan mendapat `403` untuk resource modul lain (mis. `sales/orders`), sehingga
 instance POS di sisi client tidak bisa membaca data di luar modulnya walau URL API diketik manual.
 
+### Seed Indonesia (negara + 38 provinsi + IDR)
+
+Resource `support/countries` di API hanya mengizinkan `index`/`view` (read-only, sesuai parity
+Laravel), jadi negara tidak dibuat dari UI. Untuk menyiapkan Indonesia di database baru:
+
+```powershell
+php scripts/seed-indonesia.php   # idempoten: cocokkan lewat code (ID / kode provinsi)
+```
+
+Skrip memastikan mata uang **IDR** (Rp, iso 360), negara **Indonesia** (kode `ID`, telepon `62`,
+`state_required`+`zip_required`), dan **38 provinsi** ada. Baris yang sudah ada tidak diubah,
+sehingga aman dijalankan berulang.
+
 ## 16. Import Produk dari CSV Toko Meka
 
 Data contoh `BACKUP/toko-meka/example/products.csv` (�32.000 baris, 32 kolom) sudah diimpor ke

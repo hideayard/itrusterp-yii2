@@ -305,8 +305,13 @@ class OrderController extends ResourceController
                 continue;
             }
             $productId = $line['product_id'] ?? null;
-            if ($productId === null || !is_numeric($productId)) {
-                $errors["lines.{$i}.product_id"][] = "The lines.{$i}.product_id field is required.";
+            $lineName = trim((string) ($line['name'] ?? ''));
+
+            // Baris boleh berupa item bebas (tanpa product_id) asalkan punya nama.
+            if ($productId === null || $productId === '' || !is_numeric($productId)) {
+                if ($lineName === '') {
+                    $errors["lines.{$i}.product_id"][] = "The lines.{$i}.product_id field is required unless lines.{$i}.name is filled.";
+                }
             } elseif (!(new Query())->from('products_products')->where(['id' => (int) $productId])->exists()) {
                 $errors["lines.{$i}.product_id"][] = "The selected lines.{$i}.product_id is invalid.";
             }
@@ -393,6 +398,7 @@ class OrderController extends ResourceController
         $allowed = [
             'product_id', 'product_qty', 'qty_delivered', 'product_uom_id', 'customer_lead',
             'product_packaging_qty', 'product_packaging_id', 'price_unit', 'discount', 'warehouse_id',
+            'name',
         ];
 
         foreach ($linesData as $lineData) {
@@ -401,13 +407,19 @@ class OrderController extends ResourceController
             unset($lineData['taxes'], $lineData['id']);
             $lineData = array_intersect_key($lineData, array_flip($allowed));
 
-            $product = isset($lineData['product_id'])
+            $product = isset($lineData['product_id']) && $lineData['product_id'] !== ''
                 ? Product::findUnscoped()->withTrashed()->where(['id' => $lineData['product_id']])->one()
                 : null;
 
+            // Item bebas (tanpa produk) memakai `name` dari input; baris produk memakai nama produk.
+            $lineName = trim((string) ($lineData['name'] ?? ''));
+            if ($lineName === '') {
+                $lineName = $product?->name ?? 'Line Item';
+            }
+
             $payload = array_merge([
                 'order_id' => $order->id,
-                'name' => $product?->name ?? 'Line Item',
+                'name' => $lineName,
                 'state' => $order->state,
                 'product_uom_id' => $lineData['product_uom_id'] ?? $product?->uom_id,
                 'company_id' => $order->company_id,
