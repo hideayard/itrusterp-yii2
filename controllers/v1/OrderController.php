@@ -565,10 +565,15 @@ class OrderController extends ResourceController
             'product_uom_id' => $line->product_uom_id,
         ], $data);
 
-        // Jika produk diganti tanpa menyebut nama, nama harus ikut produk baru
-        // (bukan nama lama). Kalau `name` dikirim eksplisit, itu yang dipakai.
-        $keepsOldName = !array_key_exists('name', $data) && !array_key_exists('product_id', $data);
-        if (array_key_exists('product_id', $data) && !array_key_exists('name', $data)) {
+        $explicitName = array_key_exists('name', $data);
+        $productProvided = array_key_exists('product_id', $data);
+        $productCleared = $productProvided
+            && ($data['product_id'] === null || $data['product_id'] === '');
+
+        // Produk DIGANTI tanpa menyebut nama → nama mengikuti produk baru.
+        // Saat produk dilepas (null) nama lama dipertahankan supaya baris tidak
+        // berubah menjadi "Line Item" hanya karena tautan produknya dibuang.
+        if (!$explicitName && $productProvided && !$productCleared) {
             unset($merged['name']);
         }
 
@@ -576,8 +581,9 @@ class OrderController extends ResourceController
 
         $payload = $this->linePayload($order, $merged);
 
-        // Baris custom yang hanya diubah harga/qty: nama lamanya dipertahankan.
-        if ($keepsOldName) {
+        // Nama lama dipertahankan bila `name` tidak dikirim dan produk tidak
+        // diganti ke produk lain (termasuk saat produk dilepas menjadi item bebas).
+        if (!$explicitName && (!$productProvided || $productCleared)) {
             $payload['name'] = $line->name;
         }
 
