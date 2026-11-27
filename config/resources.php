@@ -420,6 +420,10 @@ return [
             ['verb' => 'POST', 'pattern' => '<id:\d+>/toggle-lock', 'action' => 'toggle-lock'],
             ['verb' => 'GET', 'pattern' => '<order_id:\d+>/invoices', 'action' => 'invoices'],
             ['verb' => 'POST', 'pattern' => '<id:\d+>/invoice', 'action' => 'invoice'],
+            // Baris order (custom item ATAU produk) — dikelola per baris.
+            ['verb' => 'POST', 'pattern' => '<id:\d+>/lines', 'action' => 'create-line'],
+            ['verb' => 'PUT', 'pattern' => '<id:\d+>/lines/<line_id:\d+>', 'action' => 'update-line'],
+            ['verb' => 'DELETE', 'pattern' => '<id:\d+>/lines/<line_id:\d+>', 'action' => 'delete-line'],
         ],
     ],
     'sale-order-line' => [

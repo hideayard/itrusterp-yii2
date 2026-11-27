@@ -4,6 +4,7 @@ namespace app\controllers\v1;
 
 use Yii;
 use yii\db\Query;
+use yii\web\NotFoundHttpException;
 use app\components\ResourceController;
 use app\components\SalesCalculator;
 use app\components\SalesInvoicer;
@@ -23,6 +24,9 @@ class OrderController extends ResourceController
             'toggle-lock' => ['POST'],
             'invoices' => ['GET'],
             'invoice' => ['POST'],
+            'create-line' => ['POST'],
+            'update-line' => ['PUT', 'PATCH'],
+            'delete-line' => ['DELETE'],
         ]);
     }
 
@@ -407,31 +411,7 @@ class OrderController extends ResourceController
             unset($lineData['taxes'], $lineData['id']);
             $lineData = array_intersect_key($lineData, array_flip($allowed));
 
-            $product = isset($lineData['product_id']) && $lineData['product_id'] !== ''
-                ? Product::findUnscoped()->withTrashed()->where(['id' => $lineData['product_id']])->one()
-                : null;
-
-            // Item bebas (tanpa produk) memakai `name` dari input; baris produk memakai nama produk.
-            $lineName = trim((string) ($lineData['name'] ?? ''));
-            if ($lineName === '') {
-                $lineName = $product?->name ?? 'Line Item';
-            }
-
-            $payload = array_merge([
-                'order_id' => $order->id,
-                'name' => $lineName,
-                'state' => $order->state,
-                'product_uom_id' => $lineData['product_uom_id'] ?? $product?->uom_id,
-                'company_id' => $order->company_id,
-                'currency_id' => $order->currency_id,
-                'order_partner_id' => $order->partner_id,
-                'salesman_id' => $order->user_id,
-                'product_qty' => $lineData['product_qty'] ?? 0,
-                'product_uom_qty' => $lineData['product_qty'] ?? 0,
-                'price_unit' => $lineData['price_unit'] ?? $this->resolveLinePrice($order, $product, $lineData),
-                'discount' => $lineData['discount'] ?? 0,
-                'customer_lead' => $lineData['customer_lead'] ?? 0,
-            ], $lineData);
+            $payload = $this->linePayload($order, $lineData);
 
             if ($lineId) {
                 $line = SalesOrderLine::findUnscoped()->where(['id' => $lineId, 'order_id' => $order->id])->one();
@@ -449,14 +429,61 @@ class OrderController extends ResourceController
             }
 
             if ($taxes !== null) {
-                $db->createCommand()->delete('sales_order_line_taxes', ['order_line_id' => $line->id])->execute();
-                foreach ((array) $taxes as $taxId) {
-                    $db->createCommand()->insert('sales_order_line_taxes', [
-                        'order_line_id' => $line->id,
-                        'tax_id' => (int) $taxId,
-                    ])->execute();
-                }
+                $this->syncLineTaxes($line, $taxes);
             }
+        }
+    }
+
+    /**
+     * Susun atribut satu baris order dari input mentah.
+     *
+     * Baris boleh berupa PRODUK (`product_id` diisi) atau ITEM BEBAS
+     * (`product_id` kosong + `name` diisi). Nama item bebas diambil dari
+     * `name`; baris produk memakai nama produk bila `name` tidak dikirim.
+     *
+     * @param array $lineData hanya key yang sudah lolos whitelist
+     */
+    private function linePayload(SalesOrder $order, array $lineData): array
+    {
+        $product = isset($lineData['product_id']) && $lineData['product_id'] !== ''
+            ? Product::findUnscoped()->withTrashed()->where(['id' => $lineData['product_id']])->one()
+            : null;
+
+        $lineName = trim((string) ($lineData['name'] ?? ''));
+        if ($lineName === '') {
+            $lineName = $product?->name ?? 'Line Item';
+        }
+
+        // `taxes` ditangani lewat pivot sales_order_line_taxes, bukan kolom tabel.
+        unset($lineData['taxes']);
+
+        return array_merge([
+            'order_id' => $order->id,
+            'name' => $lineName,
+            'state' => $order->state,
+            'product_uom_id' => $lineData['product_uom_id'] ?? $product?->uom_id,
+            'company_id' => $order->company_id,
+            'currency_id' => $order->currency_id,
+            'order_partner_id' => $order->partner_id,
+            'salesman_id' => $order->user_id,
+            'product_qty' => $lineData['product_qty'] ?? 0,
+            'product_uom_qty' => $lineData['product_qty'] ?? 0,
+            'price_unit' => $lineData['price_unit'] ?? $this->resolveLinePrice($order, $product, $lineData),
+            'discount' => $lineData['discount'] ?? 0,
+            'customer_lead' => $lineData['customer_lead'] ?? 0,
+        ], $lineData);
+    }
+
+    /** Tulis ulang pajak milik satu baris (kosong = hapus semua). */
+    private function syncLineTaxes(SalesOrderLine $line, $taxes): void
+    {
+        $db = Yii::$app->db;
+        $db->createCommand()->delete('sales_order_line_taxes', ['order_line_id' => $line->id])->execute();
+        foreach ((array) $taxes as $taxId) {
+            $db->createCommand()->insert('sales_order_line_taxes', [
+                'order_line_id' => $line->id,
+                'tax_id' => (int) $taxId,
+            ])->execute();
         }
     }
 
@@ -467,5 +494,256 @@ class OrderController extends ResourceController
         }
 
         return round((float) $product->price, 2);
+    }
+
+    /* ====================================================================== */
+    /* Baris order — tambah / ubah / hapus satu baris                          */
+    /*                                                                         */
+    /* Satu endpoint menangani KEDUA jenis baris: produk (`product_id`) maupun */
+    /* item bebas/custom (`name` tanpa `product_id`). Dipakai UI agar baris    */
+    /* tersimpan langsung tanpa mengirim ulang seluruh order.                  */
+    /* ====================================================================== */
+
+    public function actionCreateLine($id)
+    {
+        $cfg = $this->cfg();
+        $this->authorize('update', $cfg);
+        $order = $this->findModel($cfg, $id);
+        $this->assertLinesEditable($order);
+
+        $data = $this->lineInput();
+        $this->validateLineInput($data);
+
+        $taxes = $data['taxes'] ?? null;
+
+        $line = new SalesOrderLine();
+        $line->setAttributes($this->linePayload($order, $data), false);
+
+        if (!$line->save(false)) {
+            throw new ValidationException($line->getErrors());
+        }
+
+        $this->syncLineTaxes($line, $taxes ?? []);
+
+        $order = (new SalesCalculator())->recompute($order);
+
+        // recompute() memuat ulang baris sebagai objek lain; segarkan agar
+        // price_subtotal/price_tax/price_total terbaru ikut terkirim.
+        $line->refresh();
+
+        Yii::$app->response->setStatusCode(201);
+
+        return [
+            'data' => $this->serializeLine($line),
+            'order' => $this->serialize($order, $cfg, true),
+            'message' => 'Order line created successfully.',
+        ];
+    }
+
+    public function actionUpdateLine($id, $line_id)
+    {
+        $cfg = $this->cfg();
+        $this->authorize('update', $cfg);
+        $order = $this->findModel($cfg, $id);
+        $this->assertLinesEditable($order);
+
+        $line = $this->findLine($order, $line_id);
+        $data = $this->lineInput();
+
+        if ($data === []) {
+            throw new ValidationException(['line' => ['No writable fields were sent.']]);
+        }
+
+        // Nilai akhir = nilai lama + yang dikirim. `taxes` bukan kolom tabel
+        // (pivot terpisah), jadi tidak boleh ikut ke setAttribute().
+        $merged = array_merge([
+            'product_id' => $line->product_id,
+            'name' => $line->name,
+            'product_qty' => $line->product_qty,
+            'price_unit' => $line->price_unit,
+            'discount' => $line->discount,
+            'product_uom_id' => $line->product_uom_id,
+        ], $data);
+
+        // Jika produk diganti tanpa menyebut nama, nama harus ikut produk baru
+        // (bukan nama lama). Kalau `name` dikirim eksplisit, itu yang dipakai.
+        $keepsOldName = !array_key_exists('name', $data) && !array_key_exists('product_id', $data);
+        if (array_key_exists('product_id', $data) && !array_key_exists('name', $data)) {
+            unset($merged['name']);
+        }
+
+        $this->validateLineInput($merged);
+
+        $payload = $this->linePayload($order, $merged);
+
+        // Baris custom yang hanya diubah harga/qty: nama lamanya dipertahankan.
+        if ($keepsOldName) {
+            $payload['name'] = $line->name;
+        }
+
+        foreach ($payload as $key => $value) {
+            if ($key === 'order_id' || $key === 'taxes') {
+                continue;
+            }
+            $line->setAttribute($key, $value);
+        }
+
+        if (!$line->save(false)) {
+            throw new ValidationException($line->getErrors());
+        }
+
+        if (array_key_exists('taxes', $data)) {
+            $this->syncLineTaxes($line, $data['taxes']);
+        }
+
+        $order = (new SalesCalculator())->recompute($order);
+
+        // Nilai hasil hitung (subtotal/pajak/total) disimpan oleh instance lain
+        // di dalam recompute(), jadi segarkan objek ini sebelum diserialisasi.
+        $line->refresh();
+
+        return [
+            'data' => $this->serializeLine($line),
+            'order' => $this->serialize($order, $cfg, true),
+            'message' => 'Order line updated successfully.',
+        ];
+    }
+
+    public function actionDeleteLine($id, $line_id)
+    {
+        $cfg = $this->cfg();
+        $this->authorize('update', $cfg);
+        $order = $this->findModel($cfg, $id);
+        $this->assertLinesEditable($order);
+
+        $line = $this->findLine($order, $line_id);
+
+        Yii::$app->db->createCommand()
+            ->delete('sales_order_line_taxes', ['order_line_id' => $line->id])
+            ->execute();
+        $line->delete();
+
+        $order = (new SalesCalculator())->recompute($order);
+
+        return [
+            'order' => $this->serialize($order, $cfg, true),
+            'message' => 'Order line deleted successfully.',
+        ];
+    }
+
+    /** Baris hanya boleh diubah saat order belum dikunci / belum selesai. */
+    private function assertLinesEditable(SalesOrder $order): void
+    {
+        if ($order->locked) {
+            throw new ValidationException([], 'Order is locked; unlock it before editing lines.');
+        }
+        if (in_array($order->state, [SalesOrder::STATE_CANCEL], true)) {
+            throw new ValidationException([], 'Canceled orders cannot be edited.');
+        }
+    }
+
+    private function findLine(SalesOrder $order, $lineId): SalesOrderLine
+    {
+        $line = SalesOrderLine::findUnscoped()
+            ->where(['id' => (int) $lineId, 'order_id' => $order->id])
+            ->one();
+
+        if ($line === null) {
+            throw new NotFoundHttpException('Order line not found.');
+        }
+
+        return $line;
+    }
+
+    /** Ambil hanya field baris yang boleh ditulis dari body request. */
+    private function lineInput(): array
+    {
+        $body = Yii::$app->request->getBodyParams();
+        if (!is_array($body)) {
+            return [];
+        }
+
+        $allowed = [
+            'product_id', 'name', 'product_qty', 'price_unit', 'discount', 'product_uom_id',
+            'qty_delivered', 'customer_lead', 'warehouse_id', 'product_packaging_qty',
+            'product_packaging_id', 'taxes',
+        ];
+
+        return array_intersect_key($body, array_flip($allowed));
+    }
+
+    /**
+     * Validasi satu baris. Aturannya sama dengan `validatedLines()`:
+     * wajib punya `product_id` ATAU `name`, qty wajib, harga wajib bila
+     * order tidak memakai price list.
+     */
+    private function validateLineInput(array $line): void
+    {
+        $errors = [];
+
+        $productId = $line['product_id'] ?? null;
+        $name = trim((string) ($line['name'] ?? ''));
+
+        if ($productId === null || $productId === '' || !is_numeric($productId)) {
+            if ($name === '') {
+                $errors['product_id'][] = 'The product_id field is required unless name is filled.';
+            }
+        } elseif (!(new Query())->from('products_products')->where(['id' => (int) $productId])->exists()) {
+            $errors['product_id'][] = 'The selected product_id is invalid.';
+        }
+
+        $qty = $line['product_qty'] ?? null;
+        if ($qty === null || $qty === '' || !is_numeric($qty)) {
+            $errors['product_qty'][] = 'The product_qty field is required.';
+        } elseif ((float) $qty < 0) {
+            $errors['product_qty'][] = 'The product_qty field must be at least 0.';
+        }
+
+        $price = $line['price_unit'] ?? null;
+        if ($price === null || $price === '') {
+            // Harga boleh kosong bila baris memakai produk — diambil dari harga
+            // produk (lihat linePayload/resolveLinePrice). Item bebas wajib isi.
+            $hasProduct = $productId !== null && $productId !== '' && is_numeric($productId);
+            if (!$hasProduct) {
+                $errors['price_unit'][] = 'The price_unit field is required.';
+            }
+        } elseif (!is_numeric($price)) {
+            $errors['price_unit'][] = 'The price_unit field must be a number.';
+        } elseif ((float) $price < 0) {
+            $errors['price_unit'][] = 'The price_unit field must be at least 0.';
+        }
+
+        $discount = $line['discount'] ?? null;
+        if ($discount !== null && $discount !== '' && is_numeric($discount)
+            && ((float) $discount < 0 || (float) $discount > 100)) {
+            $errors['discount'][] = 'The discount field must be between 0 and 100.';
+        }
+
+        $uom = $line['product_uom_id'] ?? null;
+        if ($uom !== null && $uom !== '' && (!is_numeric($uom)
+            || !(new Query())->from('unit_of_measures')->where(['id' => (int) $uom])->exists())) {
+            $errors['product_uom_id'][] = 'The selected product_uom_id is invalid.';
+        }
+
+        if (array_key_exists('taxes', $line) && $line['taxes'] !== null) {
+            if (!is_array($line['taxes'])) {
+                $errors['taxes'][] = 'The taxes field must be an array.';
+            } else {
+                foreach ($line['taxes'] as $j => $taxId) {
+                    if (!is_numeric($taxId) || !(new Query())->from('accounts_taxes')->where(['id' => (int) $taxId])->exists()) {
+                        $errors["taxes.{$j}"][] = "The selected taxes.{$j} is invalid.";
+                    }
+                }
+            }
+        }
+
+        if ($errors !== []) {
+            throw new ValidationException($errors);
+        }
+    }
+
+    private function serializeLine(SalesOrderLine $line): array
+    {
+        return $line->toArray([], ['product', 'product_uom', 'uom']);
     }
 }
